@@ -372,6 +372,19 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
 
 
+
+  <h2>Corrected CAS sweep across core counts</h2>
+  <p>The explicit scheduler-0 and scheduler-1 events were collected at 8, 16, and 32 cores. Each CAS is converted using 64 bytes, and bandwidth uses the full perf interval.</p>
+  <table>
+    <tr><th>Cores</th><th>Total read CAS</th><th>Total write CAS</th><th>Read BW</th><th>Write BW</th><th>Total BW</th><th>Read:write</th></tr>
+    <tr><td>8</td><td>7,168,605,267</td><td>2,471,196,473</td><td>98.6 GB/s</td><td>34.0 GB/s</td><td>132.6 GB/s</td><td>2.90:1</td></tr>
+    <tr><td>16</td><td>4,784,852,972</td><td>2,485,171,775</td><td>97.6 GB/s</td><td>50.7 GB/s</td><td>148.3 GB/s</td><td>1.93:1</td></tr>
+    <tr><td>32</td><td>4,641,513,112</td><td>2,495,286,636</td><td>100.1 GB/s</td><td>53.8 GB/s</td><td>154.0 GB/s</td><td>1.86:1</td></tr>
+  </table>
+  <p>The memory-controller read rate is already approximately 99 GB/s at eight cores and remains nearly constant through 32 cores. Write bandwidth continues increasing from 34.0 to 53.8 GB/s.</p>
+  <p>The eight-core read:write ratio of 2.90:1 is close to the 3:1 traffic model for Triad with an additional destination RFO read. At 16 and 32 cores, the ratios approach the useful 2:1 model and no full additional DRAM read stream is visible.</p>
+  <p><strong>Working hypothesis:</strong> at lower concurrency, ordinary temporal stores produce substantial destination-line read traffic. At higher streaming pressure, GNR avoids or suppresses much of that old-data DRAM fetch for complete-line overwrites. This may be a dynamic write-allocation-evasion behavior. It is not yet treated as proven; the next experiment separates regular reads from underfill reads at 8 and 16 cores.</p>
+
   <h2>Validated 16-core subchannel CAS measurement</h2>
   <p>The explicit scheduler/subchannel events resolve the generic-event undercount:</p>
   <table>
@@ -439,7 +452,8 @@ bash run_stream_full_analysis.sh</code></pre>
     <li>Completed: collect and interpret GNR Top-Down counters at 8, 16, and 32 cores.</li>
     <li>Preliminary: generic IMC CAS aliases undercount 16/32-core traffic by approximately 2× and are not accepted as total GNR traffic.</li>
     <li>Completed: validate explicit scheduler/subchannel CAS events at 16 cores; total bandwidth agrees with PCM.</li>
-    <li>Next: repeat explicit subchannel CAS collection at 8 and 32 cores.</li>
+    <li>Completed: explicit subchannel CAS sweep at 8, 16, and 32 cores.</li>
+    <li>Next: separate regular and underfill reads at 8 and 16 cores to test the RFO/write-allocation-evasion hypothesis.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
