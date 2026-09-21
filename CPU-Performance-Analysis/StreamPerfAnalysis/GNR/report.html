@@ -28,8 +28,10 @@
     <tr><td>NUMA configuration</td><td>6 nodes; 3 nodes/socket (SNC3)</td></tr>
     <tr><td>L3 cache</td><td>960 MiB total; 480 MiB reported per socket</td></tr>
     <tr><td>Relevant ISA</td><td>AVX-512, AVX-512 BF16/FP16/VNNI, AMX BF16/INT8</td></tr>
-    <tr><td>Memory channels/controllers</td><td class="pending">Pending DIMM/controller inventory</td></tr>
-    <tr><td>Configured memory speed</td><td class="pending">Pending DIMM inventory</td></tr>
+    <tr><td>Memory population</td><td>24 × 64 GiB DDR5 DIMMs; 12 populated channels/socket; 1 DIMM/channel</td></tr>
+    <tr><td>Installed capacity</td><td>768 GiB/socket; 1,536 GiB system</td></tr>
+    <tr><td>Configured memory speed</td><td>6400 MT/s on every populated DIMM</td></tr>
+    <tr><td>DIMM width</td><td>64-bit data, 80-bit total including ECC</td></tr>
   </table>
 
   <h2>NUMA and capacity</h2>
@@ -44,6 +46,17 @@
     <tr><th colspan="4">Total</th><th>1,547,269</th><th>1,538,540</th></tr>
   </table>
 
+  <h2>Theoretical memory bandwidth</h2>
+  <p>Useful channel width is 64 bits = 8 bytes. The 80-bit total DIMM width includes ECC and is not used for useful-data bandwidth.</p>
+  <table>
+    <tr><th>Scope</th><th>Calculation</th><th>Theoretical bandwidth</th></tr>
+    <tr><td>One channel</td><td>6400 MT/s × 8 bytes</td><td>51.2 GB/s</td></tr>
+    <tr><td>One SNC domain (expected four channels)</td><td>4 × 51.2 GB/s</td><td>204.8 GB/s</td></tr>
+    <tr><td>One socket</td><td>12 × 51.2 GB/s</td><td>614.4 GB/s</td></tr>
+    <tr><td>Two-socket system</td><td>2 × 614.4 GB/s</td><td>1,228.8 GB/s</td></tr>
+  </table>
+  <p>The four-channel-per-SNC mapping is the expected uniform division of 12 channels across SNC3; PCM measurements will validate the domain-level behavior.</p>
+
   <h2>SNC3 interpretation</h2>
   <p>Sub-NUMA Clustering divides each socket into three NUMA locality domains. Each domain here contains 32 physical cores, their SMT siblings, and roughly 252 GiB of local memory.</p>
   <ul>
@@ -55,8 +68,8 @@
 
   <h2>Planned measurements</h2>
   <ol>
-    <li>Determine populated channels and configured memory speed.</li>
-    <li>Calculate theoretical bandwidth per SNC domain, socket, and system.</li>
+    <li>Completed: determine populated channels and configured memory speed.</li>
+    <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
     <li>Run STREAM on one SNC node.</li>
     <li>Run STREAM across one complete socket.</li>
     <li>Validate observed traffic with Intel PCM.</li>
