@@ -77,11 +77,23 @@
   </ul>
   <p>A single-node STREAM run measures one SNC domain. A full-socket run must use all three nodes belonging to that socket and distribute memory pages across those nodes.</p>
 
+  <h2>STREAM result: one SNC domain</h2>
+  <p><strong>Configuration:</strong> NUMA node 0, CPUs 0-31, 32 physical cores, local memory binding, 100,000,000 elements/array, 20 iterations.</p>
+  <p><strong>Theoretical SNC-domain ceiling:</strong> 204.8 GB/s (expected four DDR5-6400 channels).</p>
+  <table>
+    <tr><th>Kernel</th><th>Best rate</th><th>Average time</th><th>Minimum time</th><th>Maximum time</th><th>Theoretical efficiency</th></tr>
+    <tr><td>Copy</td><td>159.030 GB/s</td><td>0.010134 s</td><td>0.010061 s</td><td>0.010354 s</td><td>77.7%</td></tr>
+    <tr><td>Scale</td><td>159.014 GB/s</td><td>0.010250 s</td><td>0.010062 s</td><td>0.010607 s</td><td>77.6%</td></tr>
+    <tr><td>Add</td><td>164.860 GB/s</td><td>0.014698 s</td><td>0.014558 s</td><td>0.015052 s</td><td>80.5%</td></tr>
+    <tr><td>Triad</td><td>165.369 GB/s</td><td>0.014621 s</td><td>0.014513 s</td><td>0.014916 s</td><td>80.7%</td></tr>
+  </table>
+  <p>STREAM reports useful algorithmic bandwidth. Intel PCM will be used next to compare it with actual memory-controller read/write traffic.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
     <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
-    <li>Run STREAM on one SNC node.</li>
+    <li>Completed: run STREAM on one SNC node.</li>
     <li>Run STREAM across one complete socket.</li>
     <li>Validate observed traffic with Intel PCM.</li>
   </ol>
