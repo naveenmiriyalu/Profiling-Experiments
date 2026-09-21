@@ -371,6 +371,30 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>The scheduler-0 and scheduler-1 read values will be summed, as will the two write values, only after their units and scope are verified. Agreement with PCM will validate the method.</p>
 
 
+
+  <h2>Validated 16-core subchannel CAS measurement</h2>
+  <p>The explicit scheduler/subchannel events resolve the generic-event undercount:</p>
+  <table>
+    <tr><th>Event</th><th>CAS operations</th><th>Transferred bytes at 64 B/CAS</th></tr>
+    <tr><td><code>sch0.rd</code></td><td>2,388,456,306</td><td>152.861 GB</td></tr>
+    <tr><td><code>sch1.rd</code></td><td>2,388,578,685</td><td>152.869 GB</td></tr>
+    <tr><td><strong>Total reads</strong></td><td><strong>4,777,034,991</strong></td><td><strong>305.730 GB</strong></td></tr>
+    <tr><td><code>sch0.wr</code></td><td>1,243,143,773</td><td>79.561 GB</td></tr>
+    <tr><td><code>sch1.wr</code></td><td>1,243,169,110</td><td>79.563 GB</td></tr>
+    <tr><td><strong>Total writes</strong></td><td><strong>2,486,312,883</strong></td><td><strong>159.124 GB</strong></td></tr>
+  </table>
+  <p>Each DDR5 subchannel is 32 data bits wide and uses a burst length of 16, so one CAS transfers 32 × 16 = 512 bits = 64 bytes. Using the 3.117368-second perf interval:</p>
+  <table>
+    <tr><th>Direction</th><th>Bandwidth</th></tr>
+    <tr><td>Read</td><td>98.1 GB/s</td></tr>
+    <tr><td>Write</td><td>51.0 GB/s</td></tr>
+    <tr><td>Total</td><td>149.1 GB/s</td></tr>
+    <tr><td>Read:write ratio</td><td>1.92:1</td></tr>
+  </table>
+  <p>The result is close to the expected Triad 2:1 ratio and agrees with the earlier PCM measurement. The small difference from the benchmark's 157.053 GB/s useful rate is largely associated with the wider 3.117-second perf interval versus the 3.056-second timed kernel region, plus cache residency and process initialization effects.</p>
+  <p>The generic 16-core values match the scheduler-0 values after unit conversion. This confirms that <code>uncore_imc/cas_count_read/</code> and <code>uncore_imc/cas_count_write/</code> represented scheduler/subchannel 0 rather than total GNR channel traffic. Total GNR traffic requires summing scheduler 0 and scheduler 1.</p>
+  <p>Traffic is exceptionally balanced between the two subchannels: the read-count difference is about 0.005%, and the write-count difference is about 0.002%.</p>
+
   <h2>GNR CAS event definitions</h2>
   <p><code>perf list --details</code> confirms that the IMC exposes independent events for two scheduler/subchannel domains:</p>
   <table>
@@ -414,7 +438,8 @@ bash run_stream_full_analysis.sh</code></pre>
     <li>Completed: run a 1, 2, 4, 8, 16, 24, and 32-core scaling sweep within one SNC domain.</li>
     <li>Completed: collect and interpret GNR Top-Down counters at 8, 16, and 32 cores.</li>
     <li>Preliminary: generic IMC CAS aliases undercount 16/32-core traffic by approximately 2× and are not accepted as total GNR traffic.</li>
-    <li>In progress: validate explicit scheduler/subchannel CAS events at 16 cores before repeating the sweep.</li>
+    <li>Completed: validate explicit scheduler/subchannel CAS events at 16 cores; total bandwidth agrees with PCM.</li>
+    <li>Next: repeat explicit subchannel CAS collection at 8 and 32 cores.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
