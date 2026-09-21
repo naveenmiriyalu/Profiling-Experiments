@@ -122,6 +122,18 @@ run_cas()
     done
 }
 
+run_nt_comparison()
+{
+    for threads in 8 16; do
+        local cpus
+        cpus="$(cpu_range "$threads")"
+
+        for kernel in triad triad_nt; do
+            perf stat -a                 -o "$RESULTS_DIR/cas_${kernel}_${threads}c.txt"                 -e unc_m_cas_count_sch0.rd                 -e unc_m_cas_count_sch1.rd                 -e unc_m_cas_count_sch0.wr                 -e unc_m_cas_count_sch1.wr                 --                 numactl --physcpubind="$cpus" --membind="$MEM_NODE"                 env OMP_NUM_THREADS="$threads"                     OMP_PLACES=cores                     OMP_PROC_BIND=close                 "$BENCHMARK_BIN" "$kernel" "$ITERATIONS" "$ELEMENTS"                 > "$RESULTS_DIR/cas_${kernel}_${threads}c_benchmark.txt"
+        done
+    done
+}
+
 run_read_breakdown()
 {
     for threads in 8 16; do
@@ -169,6 +181,11 @@ case "$mode" in
         capture_metadata
         run_cas
         ;;
+    nt-compare)
+        build_benchmark
+        capture_metadata
+        run_nt_comparison
+        ;;
     read-breakdown)
         [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
         capture_metadata
@@ -186,11 +203,12 @@ case "$mode" in
         run_long_triad
         run_tma
         run_cas
+        run_nt_comparison
         run_read_breakdown
         run_pcm
         ;;
     *)
-        echo "Usage: $0 {build|sweep|tma|cas|read-breakdown|pcm|all}" >&2
+        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all}" >&2
         exit 2
         ;;
 esac
