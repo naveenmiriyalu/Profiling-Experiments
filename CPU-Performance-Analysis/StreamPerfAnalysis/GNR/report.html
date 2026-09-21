@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GNR STREAM Performance Analysis</title>
+  <style>
+    body { max-width: 1050px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.5 system-ui, sans-serif; color: #17202a; }
+    h1, h2 { color: #123a63; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ccd3da; padding: .55rem; text-align: left; }
+    th { background: #edf3f8; }
+    code { background: #f3f5f7; padding: .1rem .3rem; }
+    .pending { color: #8a5a00; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Granite Rapids STREAM Performance Analysis</h1>
+  <p>Status: working report. Results will be added as experiments complete.</p>
+
+  <h2>System summary</h2>
+  <table>
+    <tr><th>Item</th><th>Observed value</th></tr>
+    <tr><td>Processor</td><td>Intel Xeon 6972P (Granite Rapids)</td></tr>
+    <tr><td>Sockets</td><td>2</td></tr>
+    <tr><td>Physical cores</td><td>96/socket; 192 total</td></tr>
+    <tr><td>SMT</td><td>2 threads/core; 384 logical CPUs</td></tr>
+    <tr><td>NUMA configuration</td><td>6 nodes; 3 nodes/socket (SNC3)</td></tr>
+    <tr><td>L3 cache</td><td>960 MiB total; 480 MiB reported per socket</td></tr>
+    <tr><td>Relevant ISA</td><td>AVX-512, AVX-512 BF16/FP16/VNNI, AMX BF16/INT8</td></tr>
+    <tr><td>Memory channels/controllers</td><td class="pending">Pending DIMM/controller inventory</td></tr>
+    <tr><td>Configured memory speed</td><td class="pending">Pending DIMM inventory</td></tr>
+  </table>
+
+  <h2>NUMA and capacity</h2>
+  <table>
+    <tr><th>Node</th><th>Socket</th><th>Physical CPUs</th><th>SMT sibling CPUs</th><th>Capacity (MB)</th><th>Free (MB)</th></tr>
+    <tr><td>0</td><td>0</td><td>0-31</td><td>192-223</td><td>257,189</td><td>255,692</td></tr>
+    <tr><td>1</td><td>0</td><td>32-63</td><td>224-255</td><td>258,031</td><td>257,193</td></tr>
+    <tr><td>2</td><td>0</td><td>64-95</td><td>256-287</td><td>258,031</td><td>255,058</td></tr>
+    <tr><td>3</td><td>1</td><td>96-127</td><td>288-319</td><td>257,985</td><td>256,207</td></tr>
+    <tr><td>4</td><td>1</td><td>128-159</td><td>320-351</td><td>258,031</td><td>257,210</td></tr>
+    <tr><td>5</td><td>1</td><td>160-191</td><td>352-383</td><td>258,002</td><td>257,180</td></tr>
+    <tr><th colspan="4">Total</th><th>1,547,269</th><th>1,538,540</th></tr>
+  </table>
+
+  <h2>SNC3 interpretation</h2>
+  <p>Sub-NUMA Clustering divides each socket into three NUMA locality domains. Each domain here contains 32 physical cores, their SMT siblings, and roughly 252 GiB of local memory.</p>
+  <ul>
+    <li>Local-node distance: 10</li>
+    <li>Another SNC node in the same socket: 12</li>
+    <li>A node on the other socket: 21</li>
+  </ul>
+  <p>A single-node STREAM run measures one SNC domain. A full-socket run must use all three nodes belonging to that socket and distribute memory pages across those nodes.</p>
+
+  <h2>Planned measurements</h2>
+  <ol>
+    <li>Determine populated channels and configured memory speed.</li>
+    <li>Calculate theoretical bandwidth per SNC domain, socket, and system.</li>
+    <li>Run STREAM on one SNC node.</li>
+    <li>Run STREAM across one complete socket.</li>
+    <li>Validate observed traffic with Intel PCM.</li>
+  </ol>
+</body>
+</html>
