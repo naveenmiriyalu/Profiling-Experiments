@@ -77,6 +77,26 @@
   </ul>
   <p>A single-node STREAM run measures one SNC domain. A full-socket run must use all three nodes belonging to that socket and distribute memory pages across those nodes.</p>
 
+  <h2>STREAM kernels and traffic model</h2>
+  <p>STREAM uses double-precision elements (8 bytes each). Reported bandwidth counts useful algorithmic reads and writes.</p>
+  <table>
+    <tr><th>Kernel</th><th>Operation</th><th>FLOPs/element</th><th>Useful traffic/element</th><th>Primary behavior exercised</th></tr>
+    <tr><td>Copy</td><td><code>c[i] = a[i]</code></td><td>0</td><td>8 B read + 8 B write = 16 B</td><td>Load/store and basic memory bandwidth</td></tr>
+    <tr><td>Scale</td><td><code>b[i] = scalar × c[i]</code></td><td>1</td><td>8 B read + 8 B write = 16 B</td><td>Streaming bandwidth plus vector multiply</td></tr>
+    <tr><td>Add</td><td><code>c[i] = a[i] + b[i]</code></td><td>1</td><td>16 B read + 8 B write = 24 B</td><td>Two read streams, one write stream, load ports and MLP</td></tr>
+    <tr><td>Triad</td><td><code>a[i] = b[i] + scalar × c[i]</code></td><td>2</td><td>16 B read + 8 B write = 24 B</td><td>Two read streams, one write stream, vector multiply-add/FMA</td></tr>
+  </table>
+
+  <h3>Write allocation and non-temporal stores</h3>
+  <p>With an ordinary write-back store, a destination cache line that is absent from cache normally triggers a Read For Ownership (RFO). The processor reads the 64-byte destination line, modifies it in cache, and later writes the dirty line back. For a full-line streaming overwrite, the initial destination read is unnecessary useful work.</p>
+  <table>
+    <tr><th>Kernel pattern per destination cache line</th><th>Useful traffic</th><th>Possible traffic with RFO</th></tr>
+    <tr><td>Copy/Scale</td><td>64 B source read + 64 B destination write = 128 B</td><td>64 B source read + 64 B destination RFO + 64 B writeback = 192 B</td></tr>
+    <tr><td>Add/Triad</td><td>128 B source reads + 64 B destination write = 192 B</td><td>128 B source reads + 64 B destination RFO + 64 B writeback = 256 B</td></tr>
+  </table>
+  <p>Non-temporal stores use write-combining behavior and normally avoid bringing the destination line into the ordinary cache hierarchy, eliminating the RFO for aligned full-line streaming stores. They also reduce cache pollution. They are a processor hint rather than an absolute promise and can hurt when the written data will be reused soon.</p>
+  <p>On x86, generated non-temporal store instructions can be checked with <code>objdump -d -M intel ./stream | grep -i movnt</code>. PCM will measure the actual memory-controller read/write traffic.</p>
+
   <h2>STREAM result: one SNC domain</h2>
   <p><strong>Configuration:</strong> NUMA node 0, CPUs 0-31, 32 physical cores, local memory binding, 100,000,000 elements/array, 20 iterations.</p>
   <p><strong>Theoretical SNC-domain ceiling:</strong> 204.8 GB/s (expected four DDR5-6400 channels).</p>
