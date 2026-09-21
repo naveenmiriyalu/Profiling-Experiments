@@ -373,6 +373,17 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
 
 
+
+  <h2>Regular versus underfill read breakdown</h2>
+  <table>
+    <tr><th>Cores</th><th>Regular read CAS</th><th>Underfill read CAS</th><th>Underfill share</th></tr>
+    <tr><td>8</td><td>7,123,407,330</td><td>44,730,637</td><td>0.62%</td></tr>
+    <tr><td>16</td><td>4,751,619,504</td><td>30,291,519</td><td>0.63%</td></tr>
+  </table>
+  <p>The sum of regular and underfill reads closely reproduces the corresponding all-read CAS count. Underfill reads remain approximately 0.63% at both core counts and therefore do not explain the much larger eight-core read volume.</p>
+  <p>The additional eight-core traffic is classified as regular DRAM reads. This remains consistent with write-allocation/RFO traffic, because an ownership-triggered old-data fetch need not be classified by the IMC as an underfill read. A controlled non-temporal-store variant is required to identify the extra regular reads conclusively.</p>
+  <p>The reusable command is now available as <code>run_stream_read_breakdown.sh</code>, and the end-to-end analysis includes this stage.</p>
+
   <h2>Corrected CAS sweep across core counts</h2>
   <p>The explicit scheduler-0 and scheduler-1 events were collected at 8, 16, and 32 cores. Each CAS is converted using 64 bytes, and bandwidth uses the full perf interval.</p>
   <table>
@@ -453,7 +464,8 @@ bash run_stream_full_analysis.sh</code></pre>
     <li>Preliminary: generic IMC CAS aliases undercount 16/32-core traffic by approximately 2× and are not accepted as total GNR traffic.</li>
     <li>Completed: validate explicit scheduler/subchannel CAS events at 16 cores; total bandwidth agrees with PCM.</li>
     <li>Completed: explicit subchannel CAS sweep at 8, 16, and 32 cores.</li>
-    <li>Next: separate regular and underfill reads at 8 and 16 cores to test the RFO/write-allocation-evasion hypothesis.</li>
+    <li>Completed: separate regular and underfill reads; underfill is only about 0.63% and does not explain the eight-core traffic.</li>
+    <li>Next: compare temporal and explicit non-temporal Triad stores to identify the extra regular read stream.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
