@@ -293,9 +293,9 @@ perf list | grep -Ei \
     <tr><td><code>unc_m_wpq_occupancy_*</code></td><td>Memory controller</td><td>Accumulated write-pending-queue occupancy</td><td>Are writes accumulating and forcing write-drain phases?</td></tr>
     <tr><td><code>unc_m_cas_count_sch*.rd/wr</code></td><td>Memory-controller subchannel</td><td>Read/write CAS operations separated by scheduler/subchannel</td><td>Is traffic balanced below the channel level?</td></tr>
   </table>
-  <p>For the exposed IMC CAS counters, one counted cache-line transfer corresponds to 64 bytes:</p>
-  <p><code>DRAM bytes = CAS count × 64</code></p>
-  <p><code>Average DRAM bandwidth = CAS count × 64 / elapsed seconds</code></p>
+  <p>For a raw CAS count, transferred bytes are normally derived from the transfer size. However, <code>perf</code> reads the event's sysfs <code>.scale</code> and <code>.unit</code> files and prints these generic events directly in MiB. A value already labelled <code>MiB</code> must not be multiplied by 64 again:</p>
+  <p><code>Average bandwidth (MiB/s) = perf-reported MiB / perf elapsed seconds</code></p>
+  <p>Raw subchannel-specific events must be interpreted using their own event definitions and scale. GNR exposes two scheduler/subchannel families, <code>sch0</code> and <code>sch1</code>, which must be validated and summed before claiming total DRAM traffic.</p>
 
   <h3>Pass 1: core Top-Down metrics</h3>
   <pre><code>mkdir -p counter-results
@@ -340,6 +340,36 @@ perf list --details unc_m_rpq_inserts.pch0
 perf list --details unc_m_wpq_inserts.pch0</code></pre>
   <p>Queue occupancy is an accumulated value, not directly a percentage. Its precise normalization must follow the event definition—typically using controller clock ticks or the corresponding insert count. Queue events will therefore be collected only after their definitions and applicable PMU scopes are verified.</p>
 
+
+  <h2>Preliminary generic IMC CAS results and GNR nuance</h2>
+  <p>The first CAS pass used the generic sysfs aliases <code>uncore_imc/cas_count_read/</code> and <code>uncore_imc/cas_count_write/</code>. Perf printed scaled traffic volumes in MiB:</p>
+  <table>
+    <tr><th>Cores</th><th>Perf elapsed</th><th>Generic read</th><th>Generic write</th><th>Derived total bandwidth</th><th>Status</th></tr>
+    <tr><td>8</td><td>4.652059 s</td><td>218,685.18 MiB</td><td>75,398.58 MiB</td><td>66.3 GB/s</td><td>Read count anomalous; do not interpret</td></tr>
+    <tr><td>16</td><td>3.127497 s</td><td>145,395.31 MiB</td><td>75,995.60 MiB</td><td>74.2 GB/s</td><td>Approximately half expected total</td></tr>
+    <tr><td>32</td><td>2.947661 s</td><td>141,407.31 MiB</td><td>76,347.53 MiB</td><td>77.5 GB/s</td><td>Approximately half expected total</td></tr>
+  </table>
+  <p>At 16 and 32 cores, generic CAS-derived bandwidth is approximately half the roughly 152–153 GB/s previously reported by Intel PCM for the same SNC traffic. Therefore, these generic aliases are not currently accepted as total GNR DRAM traffic. The factor-of-two relationship suggests that the alias may represent only one of the two exposed scheduler/subchannel domains, but this remains a hypothesis until the explicit events are measured.</p>
+  <p>The eight-core generic read volume is also inconsistent with the otherwise fixed amount of benchmark work. This reinforces the decision not to use the preliminary generic-event results for the bandwidth-gap conclusion.</p>
+
+  <h3>Required GNR CAS validation</h3>
+  <p>First inspect the event definitions:</p>
+  <pre><code>perf list --details unc_m_cas_count_sch0.rd
+perf list --details unc_m_cas_count_sch1.rd
+perf list --details unc_m_cas_count_sch0.wr
+perf list --details unc_m_cas_count_sch1.wr</code></pre>
+  <p>Then collect a single 16-core validation point before repeating the complete sweep:</p>
+  <pre><code>perf stat -a \
+  -e unc_m_cas_count_sch0.rd \
+  -e unc_m_cas_count_sch1.rd \
+  -e unc_m_cas_count_sch0.wr \
+  -e unc_m_cas_count_sch1.wr \
+  -- \
+  numactl --physcpubind=0-15 --membind=0 \
+  env OMP_NUM_THREADS=16 OMP_PLACES=cores OMP_PROC_BIND=close \
+  ./stream_single_kernel triad 200 100000000</code></pre>
+  <p>The scheduler-0 and scheduler-1 read values will be summed, as will the two write values, only after their units and scope are verified. Agreement with PCM will validate the method.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
@@ -348,7 +378,8 @@ perf list --details unc_m_wpq_inserts.pch0</code></pre>
     <li>Completed: validate one-SNC read/write traffic and channel placement with Intel PCM.</li>
     <li>Completed: run a 1, 2, 4, 8, 16, 24, and 32-core scaling sweep within one SNC domain.</li>
     <li>Completed: collect and interpret GNR Top-Down counters at 8, 16, and 32 cores.</li>
-    <li>In progress: collect IMC CAS read/write counts at 8, 16, and 32 cores.</li>
+    <li>Preliminary: generic IMC CAS aliases undercount 16/32-core traffic by approximately 2× and are not accepted as total GNR traffic.</li>
+    <li>In progress: validate explicit scheduler/subchannel CAS events at 16 cores before repeating the sweep.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
