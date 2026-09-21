@@ -183,13 +183,77 @@ done</code></pre>
   <h3>SNC channel validation</h3>
   <p>For all four isolated runs, significant node-0 traffic appears on memory channels 2, 3, 8, and 9. Traffic is balanced closely across those four channels; the remaining socket-0 channels show only background traffic. This validates that NUMA node 0 is one four-channel SNC3 domain with a theoretical ceiling of 204.8 GB/s.</p>
 
+
+  <h2>Long-duration Triad validation</h2>
+  <p>The isolated Triad test was increased from 200 to 2,000 iterations to reduce the influence of process startup and initialization on the PCM interval.</p>
+  <pre><code>pcm-memory 0 -- \
+numactl --physcpubind=0-31 --membind=0 \
+env OMP_NUM_THREADS=32 OMP_PLACES=cores OMP_PROC_BIND=close \
+./stream_single_kernel triad 2000 100000000</code></pre>
+  <table>
+    <tr><th>Metric</th><th>200 iterations</th><th>2,000 iterations</th></tr>
+    <tr><td>Elapsed kernel time</td><td>2.924821 s</td><td>29.506666 s</td></tr>
+    <tr><td>Useful Triad bandwidth</td><td>164.113 GB/s</td><td>162.675 GB/s</td></tr>
+    <tr><td>PCM socket-0 read</td><td>98.996 GB/s</td><td>99.493 GB/s</td></tr>
+    <tr><td>PCM socket-0 write</td><td>53.266 GB/s</td><td>52.963 GB/s</td></tr>
+    <tr><td>PCM socket-0 total</td><td>152.262 GB/s</td><td>152.456 GB/s</td></tr>
+  </table>
+  <p>The measurements remain essentially unchanged when runtime increases by 10×. Initialization and startup therefore do not explain the gap. The useful Triad rate is 79.4% of the 204.8 GB/s theoretical SNC ceiling, while PCM reports 74.4% of that ceiling as observed memory-controller traffic.</p>
+
+  <h2>Triad core-count scaling</h2>
+  <p>The following sweep uses only physical cores 0-31 in NUMA node 0. Each run uses 200 iterations and local allocation on node 0.</p>
+  <pre><code>for threads in 1 2 4 8 16 24 32; do
+    last_cpu=$((threads - 1))
+
+    numactl --physcpubind="0-$last_cpu" --membind=0 \
+    env OMP_NUM_THREADS="$threads" \
+        OMP_PLACES=cores \
+        OMP_PROC_BIND=close \
+    ./stream_single_kernel triad 200 100000000
+done | tee triad_core_sweep.txt</code></pre>
+  <table>
+    <tr><th>Physical cores</th><th>Elapsed time</th><th>Useful bandwidth</th><th>Gain vs previous point</th><th>Theoretical SNC efficiency</th><th>Bandwidth/core</th></tr>
+    <tr><td>1</td><td>25.244073 s</td><td>19.014 GB/s</td><td>—</td><td>9.3%</td><td>19.014 GB/s</td></tr>
+    <tr><td>2</td><td>14.118767 s</td><td>33.997 GB/s</td><td>1.79×</td><td>16.6%</td><td>16.999 GB/s</td></tr>
+    <tr><td>4</td><td>7.263073 s</td><td>66.088 GB/s</td><td>1.94×</td><td>32.3%</td><td>16.522 GB/s</td></tr>
+    <tr><td>8</td><td>4.593808 s</td><td>104.488 GB/s</td><td>1.58×</td><td>51.0%</td><td>13.061 GB/s</td></tr>
+    <tr><td>16</td><td>3.056037 s</td><td>157.066 GB/s</td><td>1.50×</td><td>76.7%</td><td>9.817 GB/s</td></tr>
+    <tr><td>24</td><td>2.997756 s</td><td>160.120 GB/s</td><td>1.02×</td><td>78.2%</td><td>6.672 GB/s</td></tr>
+    <tr><td>32</td><td>2.892498 s</td><td>165.947 GB/s</td><td>1.04×</td><td>81.0%</td><td>5.186 GB/s</td></tr>
+  </table>
+
+  <h3>Scaling interpretation</h3>
+  <ul>
+    <li>Bandwidth scales strongly through 16 physical cores.</li>
+    <li>Increasing from 8 to 16 cores adds 52.578 GB/s.</li>
+    <li>Increasing from 16 to 32 cores adds only 8.881 GB/s.</li>
+    <li>The declining bandwidth per core and weak gain after 16 cores show that the SNC memory subsystem is approaching saturation.</li>
+    <li>The remaining approximately 19% gap from theoretical peak is not explained by insufficient core concurrency at the 32-core point.</li>
+    <li>All active channels remain balanced, so a single poorly utilized channel is not the apparent cause.</li>
+  </ul>
+
+  <h3>Counter-based gap analysis: next step</h3>
+  <p>The next experiment will use the exact events exposed by the installed GNR kernel and perf package. Candidate evidence includes IMC read/write queue occupancy, queue-full cycles, DRAM page hits/conflicts, refresh activity, read/write turnaround pressure, and core Top-Down Memory Bound metrics.</p>
+  <pre><code>perf list | grep -Ei \
+'cas_count|rpq|wpq|page.*hit|page.*miss|refresh|memory_bound|dram_bound'
+
+for directory in /sys/bus/event_source/devices/uncore_imc_*; do
+    echo "===== $(basename "$directory") ====="
+    ls "$directory/events" 2&gt;/dev/null
+done
+
+perf list | grep -Ei \
+'tma_memory_bound|tma_backend_bound|memory_bound|topdown'</code></pre>
+  <p>Once available event names are recorded, counters will be collected at the 8-, 16-, and 32-core points. A bandwidth plateau accompanied by sustained full queues would identify controller/DRAM saturation; continued scaling with low queue occupancy would instead indicate insufficient request generation.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
     <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
     <li>Completed: run STREAM on one SNC node.</li>
     <li>Completed: validate one-SNC read/write traffic and channel placement with Intel PCM.</li>
-    <li>Run a 1, 2, 4, 8, 16, and 32-core scaling sweep within one SNC domain.</li>
+    <li>Completed: run a 1, 2, 4, 8, 16, 24, and 32-core scaling sweep within one SNC domain.</li>
+    <li>Collect GNR core and IMC counters at 8, 16, and 32 cores to explain the sustainable-bandwidth gap.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
   </ol>
