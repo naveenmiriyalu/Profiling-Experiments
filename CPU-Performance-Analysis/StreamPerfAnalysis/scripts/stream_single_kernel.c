@@ -4,6 +4,7 @@
 
 #define _POSIX_C_SOURCE 200112L
 #include <errno.h>
+#include <immintrin.h>
 #include <omp.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,7 +14,7 @@
 static void usage(const char *program)
 {
     fprintf(stderr,
-            "Usage: %s copy|scale|add|triad [iterations] [array_elements]\n",
+            "Usage: %s copy|scale|add|triad|triad_nt [iterations] [array_elements]\n",
             program);
 }
 
@@ -39,8 +40,9 @@ int main(int argc, char **argv)
     const int is_scale = strcmp(kernel, "scale") == 0;
     const int is_add = strcmp(kernel, "add") == 0;
     const int is_triad = strcmp(kernel, "triad") == 0;
+    const int is_triad_nt = strcmp(kernel, "triad_nt") == 0;
 
-    if (!is_copy && !is_scale && !is_add && !is_triad) {
+    if (!is_copy && !is_scale && !is_add && !is_triad && !is_triad_nt) {
         usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -84,10 +86,24 @@ int main(int argc, char **argv)
 #pragma omp parallel for schedule(static)
             for (size_t i = 0; i < elements; ++i)
                 c[i] = a[i] + b[i];
-        } else {
+        } else if (is_triad) {
 #pragma omp parallel for schedule(static)
             for (size_t i = 0; i < elements; ++i)
                 a[i] = b[i] + scalar * c[i];
+        } else {
+            const __m512d scalar_vector = _mm512_set1_pd(scalar);
+#pragma omp parallel
+            {
+#pragma omp for schedule(static)
+                for (size_t i = 0; i < elements; i += 8) {
+                    const __m512d b_vector = _mm512_load_pd(&b[i]);
+                    const __m512d c_vector = _mm512_load_pd(&c[i]);
+                    const __m512d result =
+                        _mm512_fmadd_pd(scalar_vector, c_vector, b_vector);
+                    _mm512_stream_pd(&a[i], result);
+                }
+                _mm_sfence();
+            }
         }
     }
 
