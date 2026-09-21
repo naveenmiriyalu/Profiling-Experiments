@@ -11,6 +11,7 @@
     th, td { border: 1px solid #ccd3da; padding: .55rem; text-align: left; }
     th { background: #edf3f8; }
     code { background: #f3f5f7; padding: .1rem .3rem; }
+    pre { overflow-x: auto; background: #f3f5f7; border: 1px solid #dce2e7; padding: .8rem; }
     .pending { color: #8a5a00; font-weight: 600; }
   </style>
 </head>
@@ -55,7 +56,7 @@
     <tr><th>Available</th><th>Not found</th></tr>
     <tr><td>GCC, numactl, numastat, perf, pcm-memory, pcm-power</td><td>Clang, likwid-perfctr, VTune</td></tr>
   </table>
-  <p>This inventory describes the test system. No STREAM measurement has been recorded yet.</p>
+  <p>Intel PCM originally installed on the host did not recognize CPU model 173. A current source build recognizes the processor as Granite Rapids and reports 12 memory controllers/channels per socket.</p>
 
   <h2>Theoretical memory bandwidth</h2>
   <p>Useful channel width is 64 bits = 8 bytes. The 80-bit total DIMM width includes ECC and is not used for useful-data bandwidth.</p>
@@ -95,7 +96,8 @@
     <tr><td>Add/Triad</td><td>128 B source reads + 64 B destination write = 192 B</td><td>128 B source reads + 64 B destination RFO + 64 B writeback = 256 B</td></tr>
   </table>
   <p>Non-temporal stores use write-combining behavior and normally avoid bringing the destination line into the ordinary cache hierarchy, eliminating the RFO for aligned full-line streaming stores. They also reduce cache pollution. They are a processor hint rather than an absolute promise and can hurt when the written data will be reused soon.</p>
-  <p>On x86, generated non-temporal store instructions can be checked with <code>objdump -d -M intel ./stream | grep -i movnt</code>. PCM will measure the actual memory-controller read/write traffic.</p>
+  <p>On x86, generated non-temporal store instructions can be checked with <code>objdump -d -M intel ./stream | grep -i movnt</code>. Disassembly of both the original STREAM executable and the isolated-kernel executable showed ordinary temporal <code>vmovupd</code> stores and no <code>movnt*</code> instructions.</p>
+  <p>Despite the temporal stores, the isolated-kernel PCM measurements below do not show an additional destination-line read at DRAM. Ownership is still required in the cache-coherence protocol, but the observed memory-controller traffic is consistent with GNR avoiding the old-data DRAM fetch for these complete cache-line overwrite streams. This is an observed result, not an assumption based only on instruction type.</p>
 
   <h2>STREAM result: one SNC domain</h2>
   <p><strong>Configuration:</strong> NUMA node 0, CPUs 0-31, 32 physical cores, local memory binding, 100,000,000 elements/array, 20 iterations.</p>
@@ -109,13 +111,87 @@
   </table>
   <p>STREAM reports useful algorithmic bandwidth. Intel PCM will be used next to compare it with actual memory-controller read/write traffic.</p>
 
+
+  <h2>Intel PCM source build</h2>
+  <p>The packaged PCM build dated 2024-01-25 rejected model 173 as unsupported. The current Intel PCM source build correctly identifies Intel Xeon 6972P as Granite Rapids.</p>
+  <pre><code>sudo dnf install -y git cmake gcc gcc-c++ make libasan
+
+git clone --recursive https://github.com/intel/pcm.git
+cd pcm
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel "$(nproc)"
+
+./build/bin/pcm-memory --version</code></pre>
+  <p>The repository helper is <code>scripts/build_intel_pcm.sh</code>. It clones recursively, configures a Release build, builds in parallel, and records the exact Git revision.</p>
+
+  <h2>PCM command: original four-kernel STREAM run</h2>
+  <pre><code>pcm-memory 0 -- \
+numactl --physcpubind=0-31 --membind=0 \
+env OMP_NUM_THREADS=32 OMP_PLACES=cores OMP_PROC_BIND=close \
+./stream</code></pre>
+  <p>The combined run reported 78.895 GB/s system reads, 53.894 GB/s system writes, and 132.788 GB/s total. Because it contains initialization and all four kernels, its aggregate read/write ratio cannot identify the behavior of an individual kernel.</p>
+
+  <h2>Isolated STREAM-kernel experiment</h2>
+  <p>A kernel-selectable benchmark, <code>scripts/stream_single_kernel.c</code>, was added so that PCM can measure Copy, Scale, Add, and Triad separately. Each run uses 200 iterations over 100,000,000 doubles per array (0.745 GiB/array), 32 physical cores from NUMA node 0, and memory allocated on node 0.</p>
+
+  <h3>Build and instruction check</h3>
+  <pre><code>gcc -O3 -march=native -fopenmp \
+stream_single_kernel.c -o stream_single_kernel
+
+objdump -d -M intel ./stream_single_kernel | \
+grep -E 'vmovnt|movnt'</code></pre>
+  <p>The instruction check returned no non-temporal stores.</p>
+
+  <h3>Run commands</h3>
+  <pre><code>PCM=/path/to/pcm/build/bin/pcm-memory
+
+for kernel in copy scale add triad; do
+    "$PCM" 0 -- \
+    numactl --physcpubind=0-31 --membind=0 \
+    env OMP_NUM_THREADS=32 OMP_PLACES=cores OMP_PROC_BIND=close \
+    ./stream_single_kernel "$kernel" 200 100000000
+done</code></pre>
+
+  <h3>Results</h3>
+  <table>
+    <tr>
+      <th>Kernel</th>
+      <th>Elapsed</th>
+      <th>Useful BW</th>
+      <th>Expected useful read/write</th>
+      <th>PCM socket-0 read</th>
+      <th>PCM socket-0 write</th>
+      <th>PCM total</th>
+      <th>PCM R:W</th>
+      <th>Useful/theoretical</th>
+    </tr>
+    <tr><td>Copy</td><td>2.031644 s</td><td>157.508 GB/s</td><td>78.754 / 78.754 GB/s</td><td>70.153 GB/s</td><td>73.631 GB/s</td><td>143.784 GB/s</td><td>0.95:1</td><td>76.9%</td></tr>
+    <tr><td>Scale</td><td>2.005703 s</td><td>159.545 GB/s</td><td>79.773 / 79.773 GB/s</td><td>69.520 GB/s</td><td>74.439 GB/s</td><td>143.959 GB/s</td><td>0.93:1</td><td>77.9%</td></tr>
+    <tr><td>Add</td><td>2.915212 s</td><td>164.654 GB/s</td><td>109.769 / 54.885 GB/s</td><td>99.414 GB/s</td><td>53.341 GB/s</td><td>152.754 GB/s</td><td>1.86:1</td><td>80.4%</td></tr>
+    <tr><td>Triad</td><td>2.924821 s</td><td>164.113 GB/s</td><td>109.409 / 54.704 GB/s</td><td>98.996 GB/s</td><td>53.266 GB/s</td><td>152.262 GB/s</td><td>1.86:1</td><td>80.1%</td></tr>
+  </table>
+  <p><strong>Timing distinction:</strong> useful bandwidth is calculated over the benchmark's timed kernel region. PCM wraps the complete process and therefore averages array initialization, process startup, and the measured kernel. The absolute values are not expected to match exactly; the read/write ratios and channel placement are the important checks.</p>
+
+  <h3>Traffic interpretation</h3>
+  <table>
+    <tr><th>Kernel class</th><th>Useful R:W</th><th>Expected with a DRAM RFO read</th><th>Observed</th></tr>
+    <tr><td>Copy/Scale</td><td>1:1</td><td>2:1</td><td>Approximately 1:1</td></tr>
+    <tr><td>Add/Triad</td><td>2:1</td><td>3:1</td><td>Approximately 1.86:1</td></tr>
+  </table>
+  <p>The results do not contain the extra DRAM read stream expected from naive write allocation. Copy and Scale show one read stream and one write stream. Add and Triad show two read streams and one write stream. Array initialization slightly increases the PCM write share.</p>
+
+  <h3>SNC channel validation</h3>
+  <p>For all four isolated runs, significant node-0 traffic appears on memory channels 2, 3, 8, and 9. Traffic is balanced closely across those four channels; the remaining socket-0 channels show only background traffic. This validates that NUMA node 0 is one four-channel SNC3 domain with a theoretical ceiling of 204.8 GB/s.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
     <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
     <li>Completed: run STREAM on one SNC node.</li>
-    <li>Run STREAM across one complete socket.</li>
-    <li>Validate observed traffic with Intel PCM.</li>
+    <li>Completed: validate one-SNC read/write traffic and channel placement with Intel PCM.</li>
+    <li>Run a 1, 2, 4, 8, 16, and 32-core scaling sweep within one SNC domain.</li>
+    <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
+    <li>Run STREAM across both sockets with local/interleaved placement.</li>
   </ol>
 </body>
 </html>
