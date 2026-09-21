@@ -247,6 +247,33 @@ perf list | grep -Ei \
   <p>Once available event names are recorded, counters will be collected at the 8-, 16-, and 32-core points. A bandwidth plateau accompanied by sustained full queues would identify controller/DRAM saturation; continued scaling with low queue occupancy would instead indicate insufficient request generation.</p>
 
 
+
+  <h2>Top-Down results: 8, 16, and 32 cores</h2>
+  <p>Each run performs the same Triad work: 200 iterations over 100,000,000 elements, or 480 GB of useful traffic. The reported useful bandwidth below is calculated as <code>480 GB / elapsed seconds</code>.</p>
+  <table>
+    <tr><th>Cores</th><th>Elapsed</th><th>Useful BW</th><th>Instructions</th><th>IPC</th><th>Average frequency</th><th>Backend Bound</th><th>Memory Bound</th><th>DRAM Bound</th></tr>
+    <tr><td>8</td><td>4.663554 s</td><td>102.9 GB/s</td><td>15.708 B</td><td>0.14</td><td>3.10 GHz</td><td>97.6%</td><td>93.9%</td><td>54.4%</td></tr>
+    <tr><td>16</td><td>3.140802 s</td><td>152.8 GB/s</td><td>15.941 B</td><td>0.10</td><td>3.10 GHz</td><td>98.3%</td><td>91.4%</td><td>78.6%</td></tr>
+    <tr><td>32</td><td>2.941003 s</td><td>163.2 GB/s</td><td>15.876 B</td><td>0.05</td><td>3.09 GHz</td><td>99.2%</td><td>95.7%</td><td>85.9%</td></tr>
+  </table>
+
+  <h3>Interpretation of the core counters</h3>
+  <ul>
+    <li><strong>Constant work:</strong> retired instructions remain near 15.8 billion, confirming that the three runs execute comparable work.</li>
+    <li><strong>No frequency explanation:</strong> average active frequency remains close to 3.1 GHz at every core count, so frequency throttling does not explain the bandwidth plateau.</li>
+    <li><strong>Falling IPC:</strong> IPC drops from 0.14 to 0.05 as more cores share the same four memory channels. Additional cores spend more time waiting rather than retiring more instructions.</li>
+    <li><strong>Backend dominance:</strong> Backend Bound is already above 97% at eight cores; frontend delivery and bad speculation are not material bottlenecks for this streaming loop.</li>
+    <li><strong>Increasing DRAM pressure:</strong> DRAM Bound increases from 54.4% to 78.6% to 85.9%, while useful bandwidth begins to plateau. This links the scaling loss directly to off-core DRAM waiting.</li>
+  </ul>
+
+  <h3>Top-Down hierarchy</h3>
+  <p>The percentages are nested classifications and must not be added:</p>
+  <pre><code>Backend Bound
+└── Memory Bound
+    └── DRAM Bound</code></pre>
+  <p>A core may be Memory Bound before the complete SNC memory subsystem is saturated. At eight cores, individual cores already wait frequently for memory, but adding more cores supplies additional concurrent requests and raises aggregate bandwidth. By 16–32 cores, extra concurrency mostly increases DRAM wait time rather than useful bandwidth.</p>
+  <p>The <code>slots</code> count is approximately six times the cycle count, consistent with six Top-Down pipeline slots being classified per cycle on this processor. Top-Down retiring slots are not the same quantity as retired instructions.</p>
+
   <h2>Available GNR performance counters</h2>
   <p><code>perf list</code> and the uncore IMC sysfs interfaces confirm that this system exposes both core Top-Down metrics and memory-controller events. Counter collection is separated into passes so limited PMU counters are not unnecessarily multiplexed.</p>
 
@@ -320,7 +347,8 @@ perf list --details unc_m_wpq_inserts.pch0</code></pre>
     <li>Completed: run STREAM on one SNC node.</li>
     <li>Completed: validate one-SNC read/write traffic and channel placement with Intel PCM.</li>
     <li>Completed: run a 1, 2, 4, 8, 16, 24, and 32-core scaling sweep within one SNC domain.</li>
-    <li>In progress: collect GNR Top-Down and IMC CAS counters at 8, 16, and 32 cores.</li>
+    <li>Completed: collect and interpret GNR Top-Down counters at 8, 16, and 32 cores.</li>
+    <li>In progress: collect IMC CAS read/write counts at 8, 16, and 32 cores.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
