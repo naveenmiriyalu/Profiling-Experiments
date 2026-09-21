@@ -246,6 +246,73 @@ perf list | grep -Ei \
 'tma_memory_bound|tma_backend_bound|memory_bound|topdown'</code></pre>
   <p>Once available event names are recorded, counters will be collected at the 8-, 16-, and 32-core points. A bandwidth plateau accompanied by sustained full queues would identify controller/DRAM saturation; continued scaling with low queue occupancy would instead indicate insufficient request generation.</p>
 
+
+  <h2>Available GNR performance counters</h2>
+  <p><code>perf list</code> and the uncore IMC sysfs interfaces confirm that this system exposes both core Top-Down metrics and memory-controller events. Counter collection is separated into passes so limited PMU counters are not unnecessarily multiplexed.</p>
+
+  <h3>Counter families and their purpose</h3>
+  <table>
+    <tr><th>Counter or metric</th><th>Domain</th><th>What it measures</th><th>Question it helps answer</th></tr>
+    <tr><td><code>cycles</code></td><td>Core</td><td>Core clock cycles attributed to the measured workload</td><td>How much execution time was available?</td></tr>
+    <tr><td><code>instructions</code></td><td>Core</td><td>Retired instructions</td><td>What is IPC, and does useful instruction throughput change with core count?</td></tr>
+    <tr><td><code>tma_backend_bound</code></td><td>Core Top-Down</td><td>Fraction of pipeline slots unable to make progress because backend resources or data were unavailable</td><td>Is the workload limited after instruction issue rather than by frontend delivery or speculation?</td></tr>
+    <tr><td><code>tma_memory_bound</code></td><td>Core Top-Down</td><td>Backend-bound work attributed to the memory hierarchy</td><td>Is memory access responsible for a significant portion of backend stalls?</td></tr>
+    <tr><td><code>tma_dram_bound</code></td><td>Core Top-Down</td><td>Memory-bound work specifically attributed to waiting for DRAM</td><td>Does the bandwidth plateau correspond to off-core DRAM delay?</td></tr>
+    <tr><td><code>uncore_imc/cas_count_read/</code></td><td>Integrated memory controller</td><td>Completed DRAM read column commands</td><td>How many bytes were actually read from DRAM?</td></tr>
+    <tr><td><code>uncore_imc/cas_count_write/</code></td><td>Integrated memory controller</td><td>Completed DRAM write column commands</td><td>How many bytes were actually written to DRAM?</td></tr>
+    <tr><td><code>unc_m_rpq_inserts.*</code></td><td>Memory controller</td><td>Requests inserted into the read pending queue</td><td>How much read-request pressure reaches the controller?</td></tr>
+    <tr><td><code>unc_m_rpq_occupancy_*</code></td><td>Memory controller</td><td>Accumulated read-pending-queue occupancy</td><td>Do read requests remain queued, indicating controller/DRAM pressure?</td></tr>
+    <tr><td><code>unc_m_wpq_inserts.*</code></td><td>Memory controller</td><td>Requests inserted into the write pending queue</td><td>How much write-request pressure reaches the controller?</td></tr>
+    <tr><td><code>unc_m_wpq_occupancy_*</code></td><td>Memory controller</td><td>Accumulated write-pending-queue occupancy</td><td>Are writes accumulating and forcing write-drain phases?</td></tr>
+    <tr><td><code>unc_m_cas_count_sch*.rd/wr</code></td><td>Memory-controller subchannel</td><td>Read/write CAS operations separated by scheduler/subchannel</td><td>Is traffic balanced below the channel level?</td></tr>
+  </table>
+  <p>For the exposed IMC CAS counters, one counted cache-line transfer corresponds to 64 bytes:</p>
+  <p><code>DRAM bytes = CAS count × 64</code></p>
+  <p><code>Average DRAM bandwidth = CAS count × 64 / elapsed seconds</code></p>
+
+  <h3>Pass 1: core Top-Down metrics</h3>
+  <pre><code>mkdir -p counter-results
+
+for threads in 8 16 32; do
+    last_cpu=$((threads - 1))
+
+    perf stat \
+      -o "counter-results/tma_${threads}c.txt" \
+      -M tma_backend_bound,tma_memory_bound,tma_dram_bound \
+      -e cycles,instructions \
+      -- \
+      numactl --physcpubind="0-$last_cpu" --membind=0 \
+      env OMP_NUM_THREADS="$threads" \
+          OMP_PLACES=cores \
+          OMP_PROC_BIND=close \
+      ./stream_single_kernel triad 200 100000000
+done</code></pre>
+  <p>The three selected points represent the rising region (8 cores), the start of saturation (16 cores), and the saturated endpoint (32 cores). The first analysis will compare Backend Bound, Memory Bound, and DRAM Bound percentages across these points.</p>
+
+  <h3>Pass 2: DRAM CAS counts</h3>
+  <pre><code>for threads in 8 16 32; do
+    last_cpu=$((threads - 1))
+
+    perf stat -a \
+      -o "counter-results/imc_${threads}c.txt" \
+      -e uncore_imc/cas_count_read/ \
+      -e uncore_imc/cas_count_write/ \
+      -- \
+      numactl --physcpubind="0-$last_cpu" --membind=0 \
+      env OMP_NUM_THREADS="$threads" \
+          OMP_PLACES=cores \
+          OMP_PROC_BIND=close \
+      ./stream_single_kernel triad 200 100000000
+done</code></pre>
+  <p>The <code>-a</code> option is required for uncore counters because memory controllers are socket-level devices rather than properties of one process or core. Background traffic should be checked, but previous PCM measurements show it is small relative to the benchmark.</p>
+
+  <h3>Pass 3: queue-event definition check</h3>
+  <pre><code>perf list --details unc_m_rpq_occupancy_sch0_pch0
+perf list --details unc_m_wpq_occupancy_sch0_pch0
+perf list --details unc_m_rpq_inserts.pch0
+perf list --details unc_m_wpq_inserts.pch0</code></pre>
+  <p>Queue occupancy is an accumulated value, not directly a percentage. Its precise normalization must follow the event definition—typically using controller clock ticks or the corresponding insert count. Queue events will therefore be collected only after their definitions and applicable PMU scopes are verified.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
@@ -253,7 +320,8 @@ perf list | grep -Ei \
     <li>Completed: run STREAM on one SNC node.</li>
     <li>Completed: validate one-SNC read/write traffic and channel placement with Intel PCM.</li>
     <li>Completed: run a 1, 2, 4, 8, 16, 24, and 32-core scaling sweep within one SNC domain.</li>
-    <li>Collect GNR core and IMC counters at 8, 16, and 32 cores to explain the sustainable-bandwidth gap.</li>
+    <li>In progress: collect GNR Top-Down and IMC CAS counters at 8, 16, and 32 cores.</li>
+    <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
   </ol>
