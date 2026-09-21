@@ -21,17 +21,21 @@
   <h2>System summary</h2>
   <table>
     <tr><th>Item</th><th>Observed value</th></tr>
-    <tr><td>Processor</td><td>Intel Xeon 6972P (Granite Rapids)</td></tr>
+    <tr><td>Operating system</td><td>Red Hat Enterprise Linux 9.9 Beta (Plow)</td></tr>
+    <tr><td>Processor</td><td>Intel Xeon 6972P (Granite Rapids), family 6 model 173 stepping 1</td></tr>
     <tr><td>Sockets</td><td>2</td></tr>
     <tr><td>Physical cores</td><td>96/socket; 192 total</td></tr>
     <tr><td>SMT</td><td>2 threads/core; 384 logical CPUs</td></tr>
     <tr><td>NUMA configuration</td><td>6 nodes; 3 nodes/socket (SNC3)</td></tr>
+    <tr><td>Private caches/core</td><td>48 KiB L1d, 64 KiB L1i, 2 MiB L2</td></tr>
     <tr><td>L3 cache</td><td>960 MiB total; 480 MiB reported per socket</td></tr>
     <tr><td>Relevant ISA</td><td>AVX-512, AVX-512 BF16/FP16/VNNI, AMX BF16/INT8</td></tr>
     <tr><td>Memory population</td><td>24 × 64 GiB dual-rank DDR5 DIMMs; 12 populated channels/socket; 1 DIMM/channel</td></tr>
     <tr><td>Installed capacity</td><td>768 GiB/socket; 1,536 GiB system</td></tr>
     <tr><td>Configured memory speed</td><td>6400 MT/s on every populated DIMM</td></tr>
     <tr><td>DIMM width</td><td>64-bit data, 80-bit total including ECC</td></tr>
+    <tr><td>Frequency policy</td><td>intel_pstate, performance governor, 800–3900 MHz configured range</td></tr>
+    <tr><td>Huge pages</td><td>No explicit 2 MiB huge pages reserved; transparent huge-page usage observed</td></tr>
   </table>
 
   <h2>NUMA and capacity</h2>
@@ -45,6 +49,13 @@
     <tr><td>5</td><td>1</td><td>160-191</td><td>352-383</td><td>258,002</td><td>257,180</td></tr>
     <tr><th colspan="4">Total</th><th>1,547,269</th><th>1,538,540</th></tr>
   </table>
+
+  <h2>Available measurement tools</h2>
+  <table>
+    <tr><th>Available</th><th>Not found</th></tr>
+    <tr><td>GCC, numactl, numastat, perf, pcm-memory, pcm-power</td><td>Clang, likwid-perfctr, VTune</td></tr>
+  </table>
+  <p>This inventory describes the test system. No STREAM measurement has been recorded yet.</p>
 
   <h2>Theoretical memory bandwidth</h2>
   <p>Useful channel width is 64 bits = 8 bytes. The 80-bit total DIMM width includes ECC and is not used for useful-data bandwidth.</p>
