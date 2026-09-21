@@ -370,6 +370,41 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   ./stream_single_kernel triad 200 100000000</code></pre>
   <p>The scheduler-0 and scheduler-1 read values will be summed, as will the two write values, only after their units and scope are verified. Agreement with PCM will validate the method.</p>
 
+
+  <h2>GNR CAS event definitions</h2>
+  <p><code>perf list --details</code> confirms that the IMC exposes independent events for two scheduler/subchannel domains:</p>
+  <table>
+    <tr><th>Event</th><th>Encoding</th><th>Meaning</th></tr>
+    <tr><td><code>unc_m_cas_count_sch0.rd</code></td><td><code>event=0x5,umask=0xcf</code></td><td>All read CAS operations on subchannel 0</td></tr>
+    <tr><td><code>unc_m_cas_count_sch1.rd</code></td><td><code>event=0x6,umask=0xcf</code></td><td>All read CAS operations on subchannel 1</td></tr>
+    <tr><td><code>unc_m_cas_count_sch0.wr</code></td><td><code>event=0x5,umask=0xf0</code></td><td>All write CAS operations on subchannel 0</td></tr>
+    <tr><td><code>unc_m_cas_count_sch1.wr</code></td><td><code>event=0x6,umask=0xf0</code></td><td>All write CAS operations on subchannel 1</td></tr>
+  </table>
+  <p>The event number selects scheduler/subchannel 0 or 1; the unit mask selects the read or write transaction class. These encodings are PMU programming values, not measurements.</p>
+  <p>The total traffic calculation under validation is:</p>
+  <p><code>Total reads = sch0.rd + sch1.rd</code></p>
+  <p><code>Total writes = sch0.wr + sch1.wr</code></p>
+  <p>The narrower <code>rd_reg</code>, <code>rd_underfill</code>, <code>wr_pre</code>, and <code>wr_nonpre</code> events are subdivisions. They are intentionally excluded from the first total-traffic experiment.</p>
+
+  <h2>Analysis script organization</h2>
+  <p>Experiments are available as separate entry-point scripts and as one end-to-end workflow. All entry points use the shared <code>run_stream_analysis.sh</code> driver so configuration and commands stay consistent as the analysis evolves.</p>
+  <table>
+    <tr><th>Script</th><th>Purpose</th></tr>
+    <tr><td><code>build_stream_benchmark.sh</code></td><td>Compile the isolated-kernel benchmark, save disassembly, and check for non-temporal stores</td></tr>
+    <tr><td><code>run_stream_core_sweep.sh</code></td><td>Run the 1, 2, 4, 8, 16, 24, and 32-core Triad sweep</td></tr>
+    <tr><td><code>run_stream_tma.sh</code></td><td>Collect Top-Down metrics at 8, 16, and 32 cores</td></tr>
+    <tr><td><code>run_stream_cas.sh</code></td><td>Collect explicit scheduler/subchannel CAS events</td></tr>
+    <tr><td><code>run_stream_pcm.sh</code></td><td>Collect PCM data separately for Copy, Scale, Add, and Triad</td></tr>
+    <tr><td><code>run_stream_full_analysis.sh</code></td><td>Run build, metadata, sweep, long Triad, TMA, CAS, and PCM end to end</td></tr>
+    <tr><td><code>run_stream_analysis.sh</code></td><td>Shared configurable implementation used by every entry point</td></tr>
+  </table>
+  <p>Individual example:</p>
+  <pre><code>bash run_stream_cas.sh</code></pre>
+  <p>End-to-end example:</p>
+  <pre><code>PCM_BIN=/home/nmiriyal/CPU-BENCHMARK/pcm/build/bin/pcm-memory \
+bash run_stream_full_analysis.sh</code></pre>
+  <p>Each invocation creates a timestamped results directory under <code>StreamPerfAnalysis/results/</code>. Environment variables such as <code>CPU_START</code>, <code>MEM_NODE</code>, <code>ELEMENTS</code>, <code>ITERATIONS</code>, <code>LONG_ITERATIONS</code>, and <code>PCM_BIN</code> can override defaults.</p>
+
   <h2>Planned measurements</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
