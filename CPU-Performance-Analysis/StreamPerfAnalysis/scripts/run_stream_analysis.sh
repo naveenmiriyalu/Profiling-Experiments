@@ -122,6 +122,16 @@ run_cas()
     done
 }
 
+run_read_breakdown()
+{
+    for threads in 8 16; do
+        local cpus
+        cpus="$(cpu_range "$threads")"
+
+        perf stat -a             -o "$RESULTS_DIR/read_breakdown_${threads}c.txt"             -e unc_m_cas_count_sch0.rd_reg             -e unc_m_cas_count_sch1.rd_reg             -e unc_m_cas_count_sch0.rd_underfill             -e unc_m_cas_count_sch1.rd_underfill             --             numactl --physcpubind="$cpus" --membind="$MEM_NODE"             env OMP_NUM_THREADS="$threads"                 OMP_PLACES=cores                 OMP_PROC_BIND=close             "$BENCHMARK_BIN" triad "$ITERATIONS" "$ELEMENTS"             > "$RESULTS_DIR/read_breakdown_${threads}c_benchmark.txt"
+    done
+}
+
 run_pcm()
 {
     if ! command -v "$PCM_BIN" >/dev/null 2>&1 && [[ ! -x "$PCM_BIN" ]]; then
@@ -159,6 +169,11 @@ case "$mode" in
         capture_metadata
         run_cas
         ;;
+    read-breakdown)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_read_breakdown
+        ;;
     pcm)
         [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
         capture_metadata
@@ -171,10 +186,11 @@ case "$mode" in
         run_long_triad
         run_tma
         run_cas
+        run_read_breakdown
         run_pcm
         ;;
     *)
-        echo "Usage: $0 {build|sweep|tma|cas|pcm|all}" >&2
+        echo "Usage: $0 {build|sweep|tma|cas|read-breakdown|pcm|all}" >&2
         exit 2
         ;;
 esac
