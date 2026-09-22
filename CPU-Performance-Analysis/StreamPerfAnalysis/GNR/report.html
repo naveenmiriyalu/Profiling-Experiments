@@ -56,6 +56,7 @@
       <li><a href="#read-pending-queue-occupancy">Read-pending queue occupancy</a></li>
       <li><a href="#temporal-versus-non-temporal-triad">Temporal versus non-temporal Triad</a></li>
       <li><a href="#baseline-status-and-follow-up-experiments">Baseline status and follow-up experiments</a></li>
+      <li><a href="#full-captured-perf-event-inventory">Full captured perf event inventory</a></li>
     </ul>
   </nav>
 
@@ -544,6 +545,1098 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
       <li><strong>NUMA-source pass:</strong> local DRAM, remote DRAM, remote forwarding, and remote HITM events.</li>
     </ol>
     <p>After every pass, inspect event running percentages and compare kernel time/useful bandwidth against the clean baseline. A counter set is not accepted merely because <code>perf</code> produced numbers.</p>
+  </details>
+
+
+  <h2 id="full-captured-perf-event-inventory">Full captured perf event inventory</h2>
+  <p>This appendix preserves the complete filtered <code>perf list --details</code> output captured on the Xeon 6972P system. It is intentionally retained verbatim for future cache, prefetch, RFO, NUMA-source, stall, MLP, CHA/TOR, and Top-Down experiments. Event availability and encodings are platform- and kernel-dependent, so this machine-local inventory is more reliable than assuming another system exposes identical aliases.</p>
+  <details>
+    <summary>Show complete captured event inventory and raw encodings</summary>
+    <pre><code>  cpu/event=0x24,period=0x30d43,umask=0xdf/
+  l2_request.miss
+       [Read requests with true-miss in L2 cache [This event is alias to
+        L2_RQSTS.MISS]. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x3f/
+  l2_rqsts.all_code_rd
+       [L2 code requests. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0xe4/
+--
+        cpu/event=0x24,period=0x30d43,umask=0xe1/
+  l2_rqsts.all_demand_miss
+       [Demand requests that miss L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x27/
+  l2_rqsts.all_demand_references
+       [Demand requests to L2 cache. Unit: cpu]
+--
+        cpu/event=0x24,period=0x30d43,umask=0xc4/
+  l2_rqsts.code_rd_miss
+       [L2 cache misses when fetching instructions. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x24/
+  l2_rqsts.demand_data_rd_hit
+       [Demand Data Read requests that hit L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0xc1/
+  l2_rqsts.demand_data_rd_miss
+       [Demand Data Read miss L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x21/
+  l2_rqsts.hit
+       [All requests that hit L2 cache. [This event is alias to
+--
+        cpu/event=0x24,period=0x30d43,umask=0xdf/
+  l2_rqsts.hwpf_miss
+       [L2_RQSTS.HWPF_MISS. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x30/
+  l2_rqsts.miss
+       [Read requests with true-miss in L2 cache [This event is alias to
+        L2_REQUEST.MISS]. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x3f/
+  l2_rqsts.references
+       [All accesses to L2 cache [This event is alias to L2_REQUEST.ALL].
+        Unit: cpu]
+--
+        cpu/event=0x24,period=0x30d43,umask=0xc2/
+  l2_rqsts.rfo_miss
+       [RFO requests that miss L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x22/
+  l2_rqsts.swpf_hit
+       [SW prefetch requests that hit L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0xc8/
+  l2_rqsts.swpf_miss
+       [SW prefetch requests that miss L2 cache. Unit: cpu]
+        cpu/event=0x24,period=0x30d43,umask=0x28/
+  l2_trans.l2_wb
+       [L2 writebacks that access L2 cache. Unit: cpu]
+        cpu/event=0x23,period=0x30d43,umask=0x40/
+  longest_lat_cache.miss
+       [Core-originated cacheable requests that missed L3 (Except hardware
+        prefetches to the L3). Unit: cpu]
+        cpu/event=0x2e,period=0x186a3,umask=0x41/
+  longest_lat_cache.reference
+       [Core-originated cacheable requests that refer to L3 (Except hardware
+        prefetches to the L3). Unit: cpu]
+        cpu/event=0x2e,period=0x186a3,umask=0x4f/
+  mem_inst_retired.all_loads
+--
+        cpu/event=0xd2,period=0x4e2b,umask=0x4/
+  mem_load_l3_hit_retired.xsnp_miss
+       [Retired load instructions whose data sources were L3 hit and
+        cross-core snoop missed in on-pkg core cache Supports address when
+        precise. Unit: cpu]
+        cpu/event=0xd2,period=0x4e2b,umask=0x1/
+--
+        cpu/event=0xd2,period=0x186a3,umask=0x8/
+  mem_load_l3_miss_retired.local_dram
+       [Retired load instructions which data sources missed L3 but serviced
+        from local dram Supports address when precise. Unit: cpu]
+        cpu/event=0xd3,period=0x186a7,umask=0x1/
+  mem_load_l3_miss_retired.remote_dram
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM Supports address when precise.
+        Unit: cpu]
+        cpu/event=0xd3,period=0xf4243,umask=0x2/
+  mem_load_l3_miss_retired.remote_fwd
+       [Retired load instructions whose data sources was forwarded from a
+        remote cache Supports address when precise. Unit: cpu]
+        cpu/event=0xd3,period=0x186a7,umask=0x8/
+  mem_load_l3_miss_retired.remote_hitm
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM Supports address when precise.
+        Unit: cpu]
+        cpu/event=0xd3,period=0xf4243,umask=0x4/
+  mem_load_misc_retired.uc
+       [Retired instructions with at least 1 uncacheable load or lock Supports
+--
+        cpu/event=0xd1,period=0x30d43,umask=0x2/
+  mem_load_retired.l2_miss
+       [Retired load instructions missed L2 cache as data sources Supports
+        address when precise. Unit: cpu]
+        cpu/event=0xd1,period=0x186b5,umask=0x10/
+  mem_load_retired.l3_hit
+       [Retired load instructions with L3 cache hits as data sources Supports
+        address when precise. Unit: cpu]
+        cpu/event=0xd1,period=0x186b5,umask=0x4/
+  mem_load_retired.l3_miss
+       [Retired load instructions missed L3 cache as data sources Supports
+        address when precise. Unit: cpu]
+        cpu/event=0xd1,period=0xc365,umask=0x20/
+  mem_store_retired.l2_hit
+--
+        cpu/event=0xc6,period=0x186a7,umask=0x3,frontend=0x12/
+  frontend_retired.l2_miss
+       [Retired Instructions who experienced Instruction L2 Cache true miss.
+        Unit: cpu]
+        cpu/event=0xc6,period=0x186a7,umask=0x3,frontend=0x13/
+  frontend_retired.late_swpf
+       [I-Cache miss too close to Code Prefetch Instruction. Unit: cpu]
+--
+memory:
+  cycle_activity.cycles_l3_miss
+       [Cycles while L3 cache miss demand load is outstanding. Unit: cpu]
+        cpu/event=0xa3,cmask=0x2,period=0xf4243,umask=0x2/
+  cycle_activity.stalls_l3_miss
+       [Execution stalls while L3 cache miss demand load is outstanding. Unit:
+        cpu]
+        cpu/event=0xa3,cmask=0x6,period=0xf4243,umask=0x6/
+  machine_clears.memory_ordering
+       [Number of machine clears due to memory ordering conflicts. Unit: cpu]
+--
+        cpu/event=0x47,cmask=0x3,period=0xf4243,umask=0x3/
+  memory_activity.stalls_l2_miss
+       [Execution stalls while L2 cache miss demand cacheable load request is
+        outstanding. Unit: cpu]
+        cpu/event=0x47,cmask=0x5,period=0xf4243,umask=0x5/
+  memory_activity.stalls_l3_miss
+       [Execution stalls while L3 cache miss demand cacheable load request is
+        outstanding. Unit: cpu]
+        cpu/event=0x47,cmask=0x9,period=0xf4243,umask=0x9/
+  ocr.demand_code_rd.l3_miss
+       [Counts demand instruction fetches and L1 instruction cache prefetches
+        that were not supplied by the local socket's L1,L2,or L3 caches. Unit:
+        cpu]
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x3fbfc00004/
+  ocr.demand_data_rd.l3_miss
+       [Counts demand data reads that were not supplied by the local socket's
+        L1,L2,or L3 caches. Unit: cpu]
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x3fbfc00001/
+  ocr.demand_rfo.l3_miss
+       [Counts demand reads for ownership (RFO) requests and software
+        prefetches for exclusive ownership (PREFETCHW) that were not supplied
+        by the local socket's L1,L2,or L3 caches. Unit: cpu]
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x3f3fc00002/
+  ocr.reads_to_core.l3_miss
+       [Counts all (cacheable) data read,code read and RFO requests including
+        demands and prefetches to the core caches (L1 or L2) that were not
+        supplied by the local socket's L1,L2,or L3 caches. Unit: cpu]
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x3f3fc04477/
+  ocr.reads_to_core.l3_miss_local
+       [Counts all (cacheable) data read,code read and RFO requests including
+        demands and prefetches to the core caches (L1 or L2) that were not
+        supplied by the local socket's L1,L2,or L3 caches and the cacheline is
+        homed locally. Unit: cpu]
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x3f04c04477/
+  ocr.reads_to_core.l3_miss_local_socket
+       [Counts all (cacheable) data read,code read and RFO requests including
+        demands and prefetches to the core caches (L1 or L2) that missed the
+        L3 Cache and were supplied by the local socket (DRAM or PMM),whether
+        or not in Sub NUMA Cluster(SNC) Mode. In SNC Mode counts PMM or DRAM
+        accesses that are controlled by the close or distant SNC Cluster. It
+        does not count misses to the L3 which go to Local CXL Type 2 Memory or
+--
+        cpu/event=0x2a,period=0x186a3,umask=0x1,offcore_rsp=0x70cc04477/
+  offcore_requests.l3_miss_demand_data_rd
+       [Counts demand data read requests that miss the L3 cache. Unit: cpu]
+        cpu/event=0x21,period=0x186a3,umask=0x10/
+  offcore_requests_outstanding.cycles_with_l3_miss_demand_data_rd
+       [Cycles where data return is pending for a Demand Data Read request who
+        miss L3 cache. Unit: cpu]
+        cpu/event=0x20,cmask=0x1,period=0xf4243,umask=0x10/
+  offcore_requests_outstanding.l3_miss_demand_data_rd
+       [For every cycle,increments by the number of demand data read requests
+        pending that are known to have missed the L3 cache. Unit: cpu]
+        cpu/event=0x20,period=0x1e8483,umask=0x10/
+  rtm_retired.aborted
+--
+        cpu/event=0xa3,cmask=0x8,period=0xf4243,umask=0x8/
+  cycle_activity.cycles_l2_miss
+       [Cycles while L2 cache miss demand load is outstanding. Unit: cpu]
+        cpu/event=0xa3,cmask=0x1,period=0xf4243,umask=0x1/
+  cycle_activity.cycles_mem_any
+       [Cycles while memory subsystem has an outstanding load. Unit: cpu]
+        cpu/event=0xa3,cmask=0x10,period=0xf4243,umask=0x10/
+--
+        cpu/event=0xa3,cmask=0xc,period=0xf4243,umask=0xc/
+  cycle_activity.stalls_l2_miss
+       [Execution stalls while L2 cache miss demand load is outstanding. Unit:
+        cpu]
+        cpu/event=0xa3,cmask=0x5,period=0xf4243,umask=0x5/
+  cycle_activity.stalls_total
+       [Total execution stalls. Unit: cpu]
+--
+  unc_cha_tor_inserts.ia_miss_drd_pref_cxl_acc
+       [L2 data prefetches issued from an IA core which miss the L3 and target
+        memory in a CXL type 2 accelerator. Unit: uncore_cha]
+        uncore_cha/event=0x35,umask=0x10c8978201/
+  unc_cha_tor_inserts.ia_miss_drd_pref_ddr
+       [DRd Prefetches from local IA cores to DDR addresses that miss the
+--
+  unc_cha_tor_inserts.ia_miss_llcprefrfo_cxl_acc
+       [L2 RFO prefetches issued from an IA core which miss the L3 and target
+        memory in a CXL type 2 accelerator. Unit: uncore_cha]
+        uncore_cha/event=0x35,umask=0x10c8878201/
+  unc_cha_tor_inserts.ia_miss_local_wcil_ddr
+       [WCIL requests from local IA cores to locally homed DDR addresses that
+--
+  unc_cha_tor_occupancy.ia_miss_drd_pref_cxl_acc
+       [TOR Occupancy for L2 data prefetches issued from an IA core which miss
+        the L3 and target memory in a CXL type 2 accelerator. Unit: uncore_cha]
+        uncore_cha/event=0x36,umask=0x10c8978201/
+  unc_cha_tor_occupancy.ia_miss_drd_pref_ddr
+       [TOR Occupancy for DRd Prefetches from local IA cores to DDR addresses
+--
+  unc_cha_tor_occupancy.ia_miss_llcprefrfo_cxl_acc
+       [TOR Occupancy for L2 RFO prefetches issued from an IA core which miss
+        the L3 and target memory in a CXL type 2 accelerator. Unit: uncore_cha]
+        uncore_cha/event=0x36,umask=0x10c8878201/
+  unc_cha_tor_occupancy.ia_miss_local_wcil_ddr
+       [TOR Occupancy for WCIL requests from local IA cores to locally homed
+--
+  tma_info_memory_l2mpki
+       [L2 cache true misses per kilo instruction for retired demand loads]
+       [1e3 * MEM_LOAD_RETIRED.L2_MISS / INST_RETIRED.ANY]
+  tma_memory_bound
+       [This metric represents fraction of slots the Memory subsystem within
+        the Backend was a bottleneck]
+       [topdown\-mem\-bound / (topdown\-fe\-bound + topdown\-bad\-spec +
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_hit_latency
+       [This metric estimates fraction of cycles with demand load accesses
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        speculative)]
+       [1e3 * (L2_RQSTS.REFERENCES - L2_RQSTS.MISS) / INST_RETIRED.ANY]
+  tma_info_memory_l2hpki_load
+       [L2 cache hits per kilo instruction for all demand loads (including
+        speculative)]
+       [1e3 * L2_RQSTS.DEMAND_DATA_RD_HIT / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki
+       [L2 cache true misses per kilo instruction for retired demand loads]
+       [1e3 * MEM_LOAD_RETIRED.L2_MISS / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki_all
+       [L2 cache ([RKL+] true) misses per kilo instruction for all request
+        types (including speculative)]
+       [1e3 * L2_RQSTS.MISS / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki_load
+       [L2 cache ([RKL+] true) misses per kilo instruction for all demand
+        loads (including speculative)]
+       [1e3 * L2_RQSTS.DEMAND_DATA_RD_MISS / INST_RETIRED.ANY]
+  tma_info_memory_mix_offcore_read_any_pki
+       [Off-core accesses per kilo instruction for reads-to-core requests
+        (speculative; including in-core HW prefetches)]
+       [1e3 * OCR.READS_TO_CORE.ANY_RESPONSE / tma_info_inst_mix_instructions]
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+
+CacheMisses: [Grouping from Top-down Microarchitecture Analysis Metrics spreadsheet]
+  tma_info_memory_l2mpki_rfo
+       [Offcore requests (L2 cache miss) per kilo instruction for demand RFOs]
+       [1e3 * L2_RQSTS.RFO_MISS / INST_RETIRED.ANY]
+
+CodeGen: [Grouping from Top-down Microarchitecture Analysis Metrics spreadsheet]
+  tma_info_branches_cond_nt
+       [Fraction of branches that are non-taken conditionals]
+--
+        &gt; 0.15]
+  tma_info_botlnk_l2_dsb_misses
+       [Total pipeline cost of DSB (uop cache) misses - subset of the
+        Instruction_Fetch_BW Bottleneck]
+       [100 * (tma_fetch_latency * tma_dsb_switches / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+--
+        tma_dsb + tma_ms))]
+       [tma_info_botlnk_l2_dsb_misses &gt; 10]
+  tma_info_frontend_dsb_switch_cost
+       [Average number of cycles of a switch from the DSB fetch-unit to MITE
+        fetch unit - see DSB_Switches tree node for details]
+       [DSB2MITE_SWITCHES.PENALTY_CYCLES /
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+       [tma_info_botlnk_l2_dsb_bandwidth &gt; 10]
+  tma_info_botlnk_l2_dsb_misses
+       [Total pipeline cost of DSB (uop cache) misses - subset of the
+        Instruction_Fetch_BW Bottleneck]
+       [100 * (tma_fetch_latency * tma_dsb_switches / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+--
+        tma_dsb + tma_ms))]
+       [tma_info_botlnk_l2_dsb_misses &gt; 10]
+  tma_info_botlnk_l2_ic_misses
+       [Total pipeline cost of Instruction Cache misses - subset of the
+        Big_Code Bottleneck]
+       [100 * (tma_fetch_latency * tma_icache_misses / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+        tma_dsb_switches))]
+       [tma_info_botlnk_l2_ic_misses &gt; 5]
+  tma_info_frontend_dsb_coverage
+       [Fraction of Uops delivered by the DSB (aka Decoded ICache; or Uop
+        Cache)]
+       [IDQ.DSB_UOPS / UOPS_ISSUED.ANY]
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_stlb_hit
+       [This metric roughly estimates the fraction of cycles where the (first
+        level) ITLB was missed by instructions fetches,that later on hit in
+--
+        tma_frontend_bound &gt; 0.15]
+  tma_info_botlnk_l2_ic_misses
+       [Total pipeline cost of Instruction Cache misses - subset of the
+        Big_Code Bottleneck]
+       [100 * (tma_fetch_latency * tma_icache_misses / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+        tma_dsb_switches))]
+       [tma_info_botlnk_l2_ic_misses &gt; 5]
+  tma_info_frontend_dsb_switches_ret
+       [This metric represents fraction of cycles the CPU retirement was
+        stalled likely due to retired DSB misses]
+       [FRONTEND_RETIRED.ANY_DSB_MISS * FRONTEND_RETIRED.ANY_DSB_MISS:R /
+--
+  tma_info_memory_soc_r2c_l3m_bw
+       [Average L3-cache miss BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.L3_MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_soc_r2c_offcore_bw
+       [Average Off-core access BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.ANY_RESPONSE / 1e9 / tma_info_system_time]
+  tma_info_system_cpu_utilization
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_icache_misses
+       [This metric represents fraction of cycles the CPU was stalled due to
+        instruction cache misses]
+--
+        tma_frontend_bound &gt; 0.15]
+  tma_info_botlnk_l2_ic_misses
+       [Total pipeline cost of Instruction Cache misses - subset of the
+        Big_Code Bottleneck]
+       [100 * (tma_fetch_latency * tma_icache_misses / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+        tma_dsb_switches))]
+       [tma_info_botlnk_l2_ic_misses &gt; 5]
+  tma_info_frontend_icache_miss_latency
+       [Average Latency for L1 instruction cache misses]
+       [ICACHE_DATA.STALLS / ICACHE_DATA.STALL_PERIODS]
+  tma_info_frontend_l2mpki_code
+       [L2 cache true code cacheline misses per kilo instruction]
+       [1e3 * FRONTEND_RETIRED.L2_MISS / INST_RETIRED.ANY]
+  tma_info_frontend_l2mpki_code_all
+       [L2 cache speculative code cacheline misses per kilo instruction]
+       [1e3 * L2_RQSTS.CODE_RD_MISS / INST_RETIRED.ANY]
+
+InsType: [Grouping from Top-down Microarchitecture Analysis Metrics spreadsheet]
+  tma_info_inst_mix_iparith
+       [Instructions per FP Arithmetic instruction (lower number means higher
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_info_memory_latency_load_l2_miss_latency
+       [Average Latency for L2 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD /
+        OFFCORE_REQUESTS.DEMAND_DATA_RD]
+  tma_lock_latency
+       [This metric represents fraction of cycles the CPU spent handling cache
+--
+        speculative)]
+       [1e3 * (L2_RQSTS.REFERENCES - L2_RQSTS.MISS) / INST_RETIRED.ANY]
+  tma_info_memory_l2hpki_load
+       [L2 cache hits per kilo instruction for all demand loads (including
+        speculative)]
+       [1e3 * L2_RQSTS.DEMAND_DATA_RD_HIT / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki
+       [L2 cache true misses per kilo instruction for retired demand loads]
+       [1e3 * MEM_LOAD_RETIRED.L2_MISS / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki_all
+       [L2 cache ([RKL+] true) misses per kilo instruction for all request
+        types (including speculative)]
+       [1e3 * L2_RQSTS.MISS / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki_load
+       [L2 cache ([RKL+] true) misses per kilo instruction for all demand
+        loads (including speculative)]
+       [1e3 * L2_RQSTS.DEMAND_DATA_RD_MISS / INST_RETIRED.ANY]
+  tma_info_memory_l3_cache_access_bw
+       [Average per-thread data access bandwidth to the L3 cache [GB / sec]]
+       [64 * OFFCORE_REQUESTS.ALL_REQUESTS / 1e9 / tma_info_system_time]
+  tma_info_memory_l3_cache_fill_bw
+       [Average per-thread data fill bandwidth to the L3 cache [GB / sec]]
+       [64 * LONGEST_LAT_CACHE.MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_l3mpki
+       [L3 cache true misses per kilo instruction for retired demand loads]
+       [1e3 * MEM_LOAD_RETIRED.L3_MISS / INST_RETIRED.ANY]
+  tma_info_memory_load_miss_real_latency
+       [Actual Average Latency for L1 data-cache miss demand load operations
+        (in core cycles)]
+       [L1D_PEND_MISS.PENDING / MEM_LOAD_COMPLETED.L1_MISS_ANY]
+--
+  tma_info_memory_soc_r2c_l3m_bw
+       [Average L3-cache miss BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.L3_MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_soc_r2c_offcore_bw
+       [Average Off-core access BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.ANY_RESPONSE / 1e9 / tma_info_system_time]
+  tma_info_memory_tlb_load_stlb_miss_ret
+--
+       [Average per-thread data fill bandwidth to the L3 cache [GB / sec]]
+       [64 * LONGEST_LAT_CACHE.MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_mlp
+       [Memory-Level-Parallelism (average number of L1 miss demand load when
+        there is at least one such miss]
+       [L1D_PEND_MISS.PENDING / L1D_PEND_MISS.PENDING_CYCLES]
+--
+  tma_info_memory_soc_r2c_l3m_bw
+       [Average L3-cache miss BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.L3_MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_soc_r2c_offcore_bw
+       [Average Off-core access BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.ANY_RESPONSE / 1e9 / tma_info_system_time]
+  tma_info_system_dram_bw_use
+--
+        external memory (DRAM) by loads]
+       [MEMORY_ACTIVITY.STALLS_L3_MISS / tma_info_thread_clks]
+       [tma_dram_bound &gt; 0.1 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt;
+        0.2]
+  tma_info_memory_load_miss_real_latency
+       [Actual Average Latency for L1 data-cache miss demand load operations
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_store_bound
+       [This metric estimates how often CPU was stalled due to RFO store
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+  tma_info_memory_latency_data_l2_mlp
+       [Average Parallel L2 cache miss data reads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DATA_RD /
+        OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DATA_RD]
+  tma_info_memory_latency_load_l2_mlp
+       [Average Parallel L2 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD /
+        cpu@OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD\,cmask\=0x1@]
+
+Memory_Lat: [Grouping from Top-down Microarchitecture Analysis Metrics spreadsheet]
+  tma_info_memory_latency_load_l2_miss_latency
+       [Average Latency for L2 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD /
+        OFFCORE_REQUESTS.DEMAND_DATA_RD]
+  tma_info_memory_latency_load_l3_miss_latency
+       [Average Latency for L3 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.L3_MISS_DEMAND_DATA_RD /
+        OFFCORE_REQUESTS.L3_MISS_DEMAND_DATA_RD]
+
+MicroSeq: [Grouping from Top-down Microarchitecture Analysis Metrics spreadsheet]
+  tma_info_frontend_ms_latency_ret
+       [This metric represents fraction of cycles the CPU retirement was
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_contested_accesses
+       [This metric estimates fraction of cycles while the memory subsystem
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+  tma_info_memory_l2mpki_all
+       [L2 cache ([RKL+] true) misses per kilo instruction for all request
+        types (including speculative)]
+       [1e3 * L2_RQSTS.MISS / INST_RETIRED.ANY]
+  tma_info_memory_l2mpki_rfo
+       [Offcore requests (L2 cache miss) per kilo instruction for demand RFOs]
+       [1e3 * L2_RQSTS.RFO_MISS / INST_RETIRED.ANY]
+  tma_info_memory_l3_cache_access_bw
+       [Average per-thread data access bandwidth to the L3 cache [GB / sec]]
+       [64 * OFFCORE_REQUESTS.ALL_REQUESTS / 1e9 / tma_info_system_time]
+  tma_info_memory_latency_data_l2_mlp
+       [Average Parallel L2 cache miss data reads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DATA_RD /
+        OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DATA_RD]
+  tma_info_memory_latency_load_l2_miss_latency
+       [Average Latency for L2 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD /
+        OFFCORE_REQUESTS.DEMAND_DATA_RD]
+  tma_info_memory_latency_load_l2_mlp
+       [Average Parallel L2 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD /
+        cpu@OFFCORE_REQUESTS_OUTSTANDING.DEMAND_DATA_RD\,cmask\=0x1@]
+  tma_info_memory_latency_load_l3_miss_latency
+       [Average Latency for L3 cache miss demand Loads]
+       [OFFCORE_REQUESTS_OUTSTANDING.L3_MISS_DEMAND_DATA_RD /
+        OFFCORE_REQUESTS.L3_MISS_DEMAND_DATA_RD]
+  tma_info_memory_mix_offcore_mwrite_any_pki
+       [Off-core accesses per kilo instruction for modified write requests]
+       [1e3 * OCR.MODIFIED_WRITE.ANY_RESPONSE / tma_info_inst_mix_instructions]
+  tma_info_memory_mix_offcore_read_any_pki
+--
+  tma_info_memory_mix_offcore_read_l3m_pki
+       [L3 cache misses per kilo instruction for reads-to-core requests
+        (speculative; including in-core HW prefetches)]
+       [1e3 * OCR.READS_TO_CORE.L3_MISS / tma_info_inst_mix_instructions]
+  tma_lock_latency
+       [This metric represents fraction of cycles the CPU spent handling cache
+        misses due to lock operations]
+       [MEM_INST_RETIRED.LOCK_LOADS * MEM_INST_RETIRED.LOCK_LOADS:R /
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_sq_full
+--
+        was handling loads from local memory]
+       [MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_local_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_mba_stalls
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_mem
+--
+        was handling loads from remote memory]
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_mem
+--
+        was handling loads from remote memory]
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+
+--
+  tma_info_memory_soc_r2c_l3m_bw
+       [Average L3-cache miss BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.L3_MISS / 1e9 / tma_info_system_time]
+  tma_info_memory_soc_r2c_offcore_bw
+       [Average Off-core access BW for Reads-to-Core (R2C)]
+       [64 * OCR.READS_TO_CORE.ANY_RESPONSE / 1e9 / tma_info_system_time]
+  tma_info_system_dram_bw_use
+--
+        external memory (DRAM) by loads]
+       [MEMORY_ACTIVITY.STALLS_L3_MISS / tma_info_thread_clks]
+       [tma_dram_bound &gt; 0.1 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt;
+        0.2]
+  tma_l1_bound
+       [This metric estimates how often the CPU was stalled without loads
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_store_bound
+       [This metric estimates how often CPU was stalled due to RFO store
+--
+        external memory (DRAM) by loads]
+       [MEMORY_ACTIVITY.STALLS_L3_MISS / tma_info_thread_clks]
+       [tma_dram_bound &gt; 0.1 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt;
+        0.2]
+  tma_dsb
+       [This metric represents Core fraction of cycles in which CPU was likely
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_lcp
+       [This metric represents fraction of cycles CPU was stalled due to
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_stlb_hit
+       [This metric roughly estimates the fraction of cycles where the (first
+        level) ITLB was missed by instructions fetches,that later on hit in
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        was handling loads from local memory]
+       [MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_local_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_mba_stalls
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_mem
+--
+        was handling loads from remote memory]
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_store_op_utilization
+--
+        number of completed instructions]
+       [L2_RQSTS.CODE_RD_MISS / INST_RETIRED.ANY]
+
+l2_demand_data_read_hits_per_instr:
+  l2_demand_data_read_hits_per_instr
+       [Ratio of number of completed demand load requests hitting in L2 cache
+--
+        total number of completed instructions]
+       [MEM_LOAD_RETIRED.L2_MISS / INST_RETIRED.ANY]
+
+l2_mpi:
+  l2_mpi
+       [Ratio of number of requests missing L2 cache (includes code+data+rfo
+--
+        external memory (DRAM) by loads]
+       [MEMORY_ACTIVITY.STALLS_L3_MISS / tma_info_thread_clks]
+       [tma_dram_bound &gt; 0.1 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt;
+        0.2]
+  tma_dsb
+       [This metric represents Core fraction of cycles in which CPU was likely
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_lcp
+       [This metric represents fraction of cycles CPU was stalled due to
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_stlb_hit
+       [This metric roughly estimates the fraction of cycles where the (first
+        level) ITLB was missed by instructions fetches,that later on hit in
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        was handling loads from local memory]
+       [MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_local_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_mba_stalls
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_mem
+--
+        was handling loads from remote memory]
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_store_op_utilization
+--
+       [max(0,FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R /
+        tma_info_thread_clks - tma_code_l2_miss)]
+       [tma_code_l2_hit &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+  tma_code_l2_miss
+       [This metric estimates fraction of cycles the CPU was stalled due to
+        instruction cache misses that miss in the L2 cache]
+       [FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R /
+        tma_info_thread_clks]
+       [tma_code_l2_miss &gt; 0.05 &amp; tma_icache_misses &gt; 0.05 &amp; tma_fetch_latency
+        &gt; 0.1 &amp; tma_frontend_bound &gt; 0.15]
+
+tma_int_operations_group: [Metrics contributing to tma_int_operations category]
+  tma_int_vector_128b
+--
+       [tma_info_botlnk_l2_dsb_bandwidth &gt; 10]
+  tma_info_botlnk_l2_dsb_misses
+       [Total pipeline cost of DSB (uop cache) misses - subset of the
+        Instruction_Fetch_BW Bottleneck]
+       [100 * (tma_fetch_latency * tma_dsb_switches / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+--
+        tma_dsb + tma_ms))]
+       [tma_info_botlnk_l2_dsb_misses &gt; 10]
+  tma_info_frontend_dsb_coverage
+       [Fraction of Uops delivered by the DSB (aka Decoded ICache; or Uop
+        Cache)]
+       [IDQ.DSB_UOPS / UOPS_ISSUED.ANY]
+--
+tma_issueFL: [Metrics related by the issue $issueFL]
+  tma_info_botlnk_l2_ic_misses
+       [Total pipeline cost of Instruction Cache misses - subset of the
+        Big_Code Bottleneck]
+       [100 * (tma_fetch_latency * tma_icache_misses / (tma_icache_misses +
+        tma_itlb_misses + tma_branch_resteers + tma_ms_switches + tma_lcp +
+        tma_dsb_switches))]
+       [tma_info_botlnk_l2_ic_misses &gt; 5]
+
+tma_issueL1: [Metrics related by the issue $issueL1]
+  tma_l1_bound
+       [This metric estimates how often the CPU was stalled without loads
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+
+--
+        was handling synchronizations due to contested accesses]
+       [((min(MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS
+        * (79 * tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) if MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS:R
+        &gt; 0 else MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS * (79 *
+        tma_info_system_core_frequency) - 4.4 *
+        tma_info_system_core_frequency) +
+        (min(MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+        MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD:R,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD *
+--
+        limited)]
+       [(min(MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R,
+        MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) - 4.4
+        * tma_info_system_core_frequency) if MEM_LOAD_RETIRED.L3_HIT:R &gt; 0
+        else MEM_LOAD_RETIRED.L3_HIT * (37 * tma_info_system_core_frequency) -
+        4.4 * tma_info_system_core_frequency) * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_l3_hit_latency &gt; 0.1 &amp; tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+--
+        was handling loads from local memory]
+       [MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.LOCAL_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT /
+        MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_local_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_cache
+--
+        synchronizations issues]
+       [(MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_HITM:R +
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_FWD:R) * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_cache &gt; 0.05 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1
+        &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_remote_mem
+--
+        was handling loads from remote memory]
+       [MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM *
+        MEM_LOAD_L3_MISS_RETIRED.REMOTE_DRAM:R * (1 + MEM_LOAD_RETIRED.FB_HIT
+        / MEM_LOAD_RETIRED.L1_MISS / 2) / tma_info_thread_clks]
+       [tma_remote_mem &gt; 0.1 &amp; tma_mem_latency &gt; 0.1 &amp; tma_dram_bound &gt; 0.1 &amp;
+        tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+
+--
+        external memory (DRAM) by loads]
+       [MEMORY_ACTIVITY.STALLS_L3_MISS / tma_info_thread_clks]
+       [tma_dram_bound &gt; 0.1 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt;
+        0.2]
+  tma_l1_bound
+       [This metric estimates how often the CPU was stalled without loads
+--
+        accesses by loads]
+       [(MEMORY_ACTIVITY.STALLS_L1D_MISS - MEMORY_ACTIVITY.STALLS_L2_MISS) /
+        tma_info_thread_clks]
+       [tma_l2_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_l3_bound
+       [This metric estimates how often the CPU was stalled due to loads
+        accesses to L3 cache or contended with a sibling Core]
+       [(MEMORY_ACTIVITY.STALLS_L2_MISS - MEMORY_ACTIVITY.STALLS_L3_MISS) /
+        tma_info_thread_clks]
+       [tma_l3_bound &gt; 0.05 &amp; tma_memory_bound &gt; 0.2 &amp; tma_backend_bound &gt; 0.2]
+  tma_store_bound
+       [This metric estimates how often CPU was stalled due to RFO store
+--
+        synchronizations due to False Sharing]
+       [(170 * tma_info_system_core_frequency * cpu@OCR.DEMAND_RFO.L3_MISS\,
+        offcore_rsp\=0x103b800002@ + 81 * tma_info_system_core_frequency *
+        OCR.DEMAND_RFO.L3_HIT.SNOOP_HITM) / tma_info_thread_clks]
+       [tma_false_sharing &gt; 0.05 &amp; tma_store_bound &gt; 0.2 &amp; tma_memory_bound &gt;
+        0.2 &amp; tma_backend_bound &gt; 0.2]
+[root@perf-intel-30 scripts]# 
+</code></pre>
   </details>
 
   <h2 id="analysis-script-organization">Analysis script organization</h2>
