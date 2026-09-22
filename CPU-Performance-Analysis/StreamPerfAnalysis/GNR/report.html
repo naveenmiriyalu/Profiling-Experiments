@@ -1827,5 +1827,73 @@ bash run_stream_analysis.sh nt-compare</code></pre>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
   </ol>
+
+  <h2 id="appendix-msr-firmware-prefetch-controls">Appendix: MSRs, firmware, and prefetch-control workflow</h2>
+  <p>This section records the control-plane lessons from the STREAM investigation so future experiments can modify processor behavior safely and reproducibly.</p>
+
+  <h3>Platform identification</h3>
+  <table>
+    <tr><th>Item</th><th>Observed value</th></tr>
+    <tr><td>Platform</td><td>Intel Corporation AvenueCity reference platform</td></tr>
+    <tr><td>Processor</td><td>Intel Xeon 6972P, Granite Rapids</td></tr>
+    <tr><td>CPUID family/model/stepping</td><td>Family 6, model 173, stepping 1</td></tr>
+    <tr><td>BIOS</td><td>Intel BHSDCRB1.IPC.0035.D44.2408292336, released 2024-08-29</td></tr>
+    <tr><td>BMC access</td><td>Available; preferred for remote BIOS/firmware configuration and recovery</td></tr>
+  </table>
+
+  <h3>MSR access observed on the host</h3>
+  <p>The Linux MSR interface is available through <code>/dev/cpu/&lt;n&gt;/msr</code>, and <code>rdmsr</code> is installed. Reading <code>MSR 0x1A4</code> on CPUs 0-7 returned the same baseline value:</p>
+  <pre>CPU 0-7: 0x1A4 = 0x20</pre>
+  <p><code>rdmsr</code> prints hexadecimal by default, so <code>20</code> means <code>0x20</code>. This records the baseline register state; it does <strong>not</strong> by itself establish the meaning of bit 5 or prove which prefetchers are enabled on Granite Rapids.</p>
+
+  <h3>Documentation hierarchy</h3>
+  <ol>
+    <li><strong>Intel Software Developer's Manual, Volume 4:</strong> authoritative starting point for model-specific register addresses, bit definitions, read/write properties, scope, and processor-model applicability.</li>
+    <li><strong>Intel Optimization Reference Manual:</strong> use to understand the microarchitectural behavior of hardware prefetchers, caches, memory-level parallelism, and related optimization mechanisms.</li>
+    <li><strong>Intel PerfMon event database:</strong> use for PMU event definitions such as <code>L2_RQSTS.*</code>, <code>OCR.*</code>, <code>MEMORY_ACTIVITY.*</code>, <code>OFFCORE_REQUESTS_OUTSTANDING.*</code>, and uncore memory-controller events.</li>
+    <li><strong>Platform BIOS/BKC/firmware documentation:</strong> use for AvenueCity-specific controls exposed by firmware. These settings may be the supported way to change processor behavior even when an underlying MSR is undocumented or differs from older generations.</li>
+  </ol>
+
+  <h3>Safe MSR workflow</h3>
+  <pre>Identify exact CPU family/model/stepping
+        |
+        v
+Find the register in Intel documentation
+        |
+        v
+Verify that the exact processor model is covered
+        |
+        v
+Verify bit definitions, R/W status, and scope
+        |
+        v
+Read and save the original value on all relevant CPUs
+        |
+        v
+Modify only documented writable bits; preserve reserved bits
+        |
+        v
+Read back and verify
+        |
+        v
+Run one controlled experiment
+        |
+        v
+Restore the original value and verify restoration</pre>
+  <p>Do not copy a <code>wrmsr</code> recipe from an older Xeon generation simply because the MSR address is the same. Model-specific semantics can change. Reads are useful for investigation, but writes should be limited to controls explicitly documented for the processor/platform.</p>
+
+  <h3>Firmware-first approach for prefetch experiments</h3>
+  <p>Because BMC access is available, the preferred first experiment is to use AvenueCity BIOS controls rather than directly writing an uncertain Granite Rapids MSR. Record the original BIOS values before changing anything. Search processor configuration for controls containing terms such as <em>prefetch</em>, <em>streamer</em>, <em>spatial</em>, <em>DCU</em>, <em>MLC/L2</em>, or <em>LLC</em>. Exact option names and availability are firmware dependent.</p>
+  <p>A useful technique is to change a documented BIOS prefetch option, reboot, and then read relevant MSRs again. If the register changes, this can help correlate the supported firmware control with processor state without guessing at undocumented write semantics.</p>
+
+  <h3>Recommended STREAM prefetch experiment</h3>
+  <table>
+    <tr><th>Configuration</th><th>8 cores</th><th>16 cores</th><th>32 cores</th></tr>
+    <tr><td>Normal/default prefetch configuration</td><td>Run</td><td>Run</td><td>Run</td></tr>
+    <tr><td>Relevant core prefetchers disabled through supported firmware controls</td><td>Run</td><td>Run</td><td>Run</td></tr>
+  </table>
+  <p>Keep kernel, array size, iteration count, CPU binding, NUMA memory binding, frequency/power policy, and measurement duration constant. Compare runtime/useful STREAM bandwidth, demand cache misses, hardware-prefetch activity, L2/L3 memory-stall events, outstanding-request/MLP proxies, IMC/subchannel bandwidth, and NUMA locality.</p>
+  <p>The central question is not merely whether prefetching improves STREAM. The stronger performance-engineering question is whether hardware prefetching creates enough additional memory-level parallelism to reach sustainable DRAM bandwidth with fewer active cores, and how its benefit changes as core count itself supplies more concurrent memory streams.</p>
+
 </body>
 </html>
