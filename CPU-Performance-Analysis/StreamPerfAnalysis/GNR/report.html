@@ -465,6 +465,37 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
 
 
+  <h2>How to interpret RPQ counters and multiplexing</h2>
+  <h3>Why perf multiplexed the events</h3>
+  <p>An uncore memory-controller PMU has a limited number of programmable hardware counters. The original command requested eight events at once: four RPQ insert events and four RPQ occupancy events. Because all eight could not remain scheduled simultaneously, Linux <code>perf</code> time-shared the available registers between event sets. The approximately <code>(50%)</code> value beside each result means that event was physically active for only about half of the measurement interval.</p>
+  <p><code>perf</code> scales a multiplexed count approximately as:</p>
+  <pre><code>reported count = raw observed count × enabled time / running time</code></pre>
+  <p>This scaling assumes the event rate is reasonably stable while the event is not being counted. STREAM's steady state makes the scaled trend useful, but a non-multiplexed capture is preferable. Multiplexing may also perturb execution, and the multiplexed runs were slower than the clean sweep, especially at eight cores.</p>
+
+  <h3>Scheduler and pseudo-channel names</h3>
+  <table>
+    <tr><th>Suffix</th><th>Scope</th></tr>
+    <tr><td><code>sch0_pch0</code></td><td>Scheduler 0, pseudo-channel 0</td></tr>
+    <tr><td><code>sch0_pch1</code></td><td>Scheduler 0, pseudo-channel 1</td></tr>
+    <tr><td><code>sch1_pch0</code></td><td>Scheduler 1, pseudo-channel 0</td></tr>
+    <tr><td><code>sch1_pch1</code></td><td>Scheduler 1, pseudo-channel 1</td></tr>
+  </table>
+  <p>Because the command uses <code>perf stat -a</code>, each named event is aggregated across the applicable uncore IMC PMU instances.</p>
+
+  <h3>RPQ inserts</h3>
+  <p><code>unc_m_rpq_inserts.*</code> counts read requests inserted into the memory controller's Read Pending Queue for the selected scheduler and pseudo-channel. It measures request volume, not waiting time. The summed eight-core insert count closely matches the explicit read-CAS total, which provides a useful consistency check.</p>
+
+  <h3>RPQ occupancy</h3>
+  <p><code>unc_m_rpq_occupancy_*</code> accumulates queue depth over controller ticks. If the queue contains 3, 5, and 4 entries on three successive ticks, the counter adds 3 + 5 + 4 = 12 entry-ticks. It is therefore the time-integral of queue depth, not maximum occupancy and not directly the average queue depth.</p>
+
+  <h3>Normalizing occupancy using inserts</h3>
+  <p>The ratio below estimates average queue-residence ticks per inserted request:</p>
+  <pre><code>residence indicator = summed RPQ occupancy / summed RPQ inserts</code></pre>
+  <p>This is the counter form of Little's Law, <code>L = λW</code>, rearranged as <code>W = L / λ</code>. A rising ratio means requests are spending more controller ticks resident in the pending queue. It should not be converted to nanoseconds until the precise event semantics and relevant uncore clock frequency are validated.</p>
+
+  <h3>Why the automated measurement uses two passes</h3>
+  <p>The <code>rpq</code> mode collects scheduler 0 and scheduler 1 separately, with four events per pass. This is intended to keep each event near 100% running time and avoid the original 50% multiplexing. The tradeoff is that the schedulers are measured in separate benchmark executions, so their elapsed time and useful bandwidth must be checked for run-to-run stability before their counts are combined.</p>
+
   <h2>Read-pending queue occupancy</h2>
   <table>
     <tr><th>Cores</th><th>Useful bandwidth during capture</th><th>Total RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th></tr>
