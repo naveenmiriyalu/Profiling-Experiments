@@ -457,15 +457,15 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <h2>Temporal versus non-temporal Triad</h2>
   <p>The explicit AVX-512 variant was verified in the disassembly by the presence of <code>vmovntpd</code>. Both variants then ran the same 200-iteration, 100,000,000-element Triad workload with explicit subchannel CAS counters.</p>
   <table>
-    <tr><th>Cores</th><th>Store type</th><th>Read traffic</th><th>Write traffic</th><th>Read:write</th><th>Measured read + write rate</th></tr>
-    <tr><td>8</td><td>Temporal</td><td>458.81 GB</td><td>158.31 GB</td><td>2.90:1</td><td>131.76 GB/s</td></tr>
-    <tr><td>8</td><td>Non-temporal</td><td>298.99 GB</td><td>165.36 GB</td><td>1.81:1</td><td>122.27 GB/s</td></tr>
-    <tr><td>16</td><td>Temporal</td><td>305.15 GB</td><td>159.08 GB</td><td>1.92:1</td><td>149.10 GB/s</td></tr>
-    <tr><td>16</td><td>Non-temporal</td><td>296.50 GB</td><td>165.11 GB</td><td>1.80:1</td><td>146.36 GB/s</td></tr>
+    <tr><th>Cores</th><th>Store type</th><th>Kernel time</th><th>Useful bandwidth</th><th>Read traffic</th><th>Write traffic</th><th>Read:write</th><th>CAS rate*</th></tr>
+    <tr><td>8</td><td>Temporal</td><td>4.610 s</td><td>104.122 GB/s</td><td>458.81 GB</td><td>158.31 GB</td><td>2.90:1</td><td>131.76 GB/s</td></tr>
+    <tr><td>8</td><td>Non-temporal</td><td>3.725 s</td><td>128.875 GB/s</td><td>298.99 GB</td><td>165.36 GB</td><td>1.81:1</td><td>122.27 GB/s</td></tr>
+    <tr><td>16</td><td>Temporal</td><td>3.052 s</td><td>157.255 GB/s</td><td>305.15 GB</td><td>159.08 GB</td><td>1.92:1</td><td>149.10 GB/s</td></tr>
+    <tr><td>16</td><td>Non-temporal</td><td>3.092 s</td><td>155.259 GB/s</td><td>296.50 GB</td><td>165.11 GB</td><td>1.80:1</td><td>146.36 GB/s</td></tr>
   </table>
-  <p>At eight cores, non-temporal stores remove 159.82 GB of read traffic while retaining the output write stream. This is almost exactly one 160 GB output-array stream: 100,000,000 elements × 8 bytes × 200 iterations. The result strongly identifies the extra temporal-store traffic as write allocation/read-for-ownership rather than IMC underfill.</p>
-  <p>At sixteen cores, temporal Triad already avoids nearly all of that extra read stream. This supports the earlier observation that Granite Rapids can dynamically avoid unnecessary write-allocation traffic for sustained full-line streaming stores. Explicit non-temporal stores make that behavior deterministic.</p>
-  <p><strong>Nuance:</strong> the CAS-derived rates use the complete <code>perf stat</code> wall interval, which includes startup and teardown, whereas the benchmark's useful bandwidth uses its internally timed kernel region. Traffic totals and read:write ratios are therefore the cleaner evidence for this comparison.</p>
+  <p>At eight cores, non-temporal stores remove 159.82 GB of read traffic while retaining the output write stream. This is almost exactly one 160 GB output-array stream: 100,000,000 elements × 8 bytes × 200 iterations. The result strongly identifies the extra temporal-store traffic as write allocation/read-for-ownership rather than IMC underfill. Removing that traffic reduces kernel time by 19.2% and raises useful bandwidth from 104.122 to 128.875 GB/s, a 23.8% improvement.</p>
+  <p>At sixteen cores, temporal Triad already avoids nearly all of that extra read stream. This supports the earlier observation that Granite Rapids can dynamically avoid unnecessary write-allocation traffic for sustained full-line streaming stores. Explicit non-temporal stores make that behavior deterministic, but useful bandwidth is 1.3% lower here (155.259 versus 157.255 GB/s), so it provides no performance benefit once temporal stores receive the same effective RFO avoidance.</p>
+  <p><strong>*CAS-rate nuance:</strong> the CAS-derived rates use the complete <code>perf stat</code> wall interval, which includes startup and teardown, whereas the benchmark's useful bandwidth uses its internally timed kernel region. Traffic totals and read:write ratios are therefore the cleaner evidence for this comparison.</p>
   <pre><code>bash run_stream_nt_comparison.sh
 
 # Or invoke the shared driver:
