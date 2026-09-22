@@ -5,8 +5,7 @@ set -euo pipefail
 # build + metadata + core sweep + long Triad + TMA + CAS + PCM.
 #
 # Example:
-#   PCM_BIN=/opt/pcm/build/bin/pcm-memory \
-#   bash run_stream_full_analysis.sh
+#   bash run_stream_full_analysis.sh --pcm-bin-dir /opt/pcm/build/bin
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$SCRIPT_DIR/run_stream_analysis.sh" all
+exec bash "$SCRIPT_DIR/run_stream_analysis.sh" all "$@"
