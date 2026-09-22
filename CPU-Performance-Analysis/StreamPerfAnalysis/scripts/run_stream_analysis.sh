@@ -8,10 +8,10 @@ set -euo pipefail
 #   ./run_stream_analysis.sh sweep
 #   ./run_stream_analysis.sh tma
 #   ./run_stream_analysis.sh cas
-#   PCM_BIN=/path/to/pcm-memory ./run_stream_analysis.sh pcm
-#   PCM_BIN=/path/to/pcm-memory ./run_stream_analysis.sh all
+#   ./run_stream_analysis.sh pcm --pcm-bin-dir /path/to/pcm/bin
+#   ./run_stream_analysis.sh all --pcm-bin /path/to/pcm-memory
 #
-# Configuration can be overridden through environment variables.
+# Configuration can also be overridden through PCM_BIN or PCM_BIN_DIR.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCHMARK_SOURCE="${BENCHMARK_SOURCE:-$SCRIPT_DIR/stream_single_kernel.c}"
@@ -27,7 +27,42 @@ ITERATIONS="${ITERATIONS:-200}"
 LONG_ITERATIONS="${LONG_ITERATIONS:-2000}"
 CORE_COUNTS=(${CORE_COUNTS:-1 2 4 8 16 24 32})
 COUNTER_CORE_COUNTS=(${COUNTER_CORE_COUNTS:-8 16 32})
-PCM_BIN="${PCM_BIN:-pcm-memory}"
+PCM_BIN="${PCM_BIN:-}"
+PCM_BIN_DIR="${PCM_BIN_DIR:-}"
+
+mode="${1:-all}"
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --pcm-bin-dir)
+            [[ $# -ge 2 ]] || { echo "Missing value for --pcm-bin-dir" >&2; exit 2; }
+            PCM_BIN_DIR="$2"
+            shift 2
+            ;;
+        --pcm-bin)
+            [[ $# -ge 2 ]] || { echo "Missing value for --pcm-bin" >&2; exit 2; }
+            PCM_BIN="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -n "$PCM_BIN_DIR" ]]; then
+    PCM_BIN="${PCM_BIN_DIR%/}/pcm-memory"
+elif [[ -z "$PCM_BIN" ]]; then
+    PCM_BIN="pcm-memory"
+fi
 
 mkdir -p "$RESULTS_DIR"
 
@@ -148,7 +183,7 @@ run_pcm()
 {
     if ! command -v "$PCM_BIN" >/dev/null 2>&1 && [[ ! -x "$PCM_BIN" ]]; then
         echo "PCM executable not found: $PCM_BIN" >&2
-        echo "Set PCM_BIN=/absolute/path/to/pcm-memory" >&2
+        echo "Use --pcm-bin-dir /path/to/pcm/bin, --pcm-bin /path/to/pcm-memory, or set PCM_BIN." >&2
         return 1
     fi
 
@@ -158,8 +193,6 @@ run_pcm()
         "$PCM_BIN" 0 --             numactl --physcpubind="$(cpu_range 32)" --membind="$MEM_NODE"             env OMP_NUM_THREADS=32                 OMP_PLACES=cores                 OMP_PROC_BIND=close             "$BENCHMARK_BIN" "$kernel" "$ITERATIONS" "$ELEMENTS"             > "$output" 2>&1
     done
 }
-
-mode="${1:-all}"
 
 case "$mode" in
     build)
@@ -208,7 +241,7 @@ case "$mode" in
         run_pcm
         ;;
     *)
-        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all}" >&2
+        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]" >&2
         exit 2
         ;;
 esac
