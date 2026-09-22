@@ -496,6 +496,34 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <h3>Why the automated measurement uses two passes</h3>
   <p>The <code>rpq</code> mode collects scheduler 0 and scheduler 1 separately, with four events per pass. This is intended to keep each event near 100% running time and avoid the original 50% multiplexing. The tradeoff is that the schedulers are measured in separate benchmark executions, so their elapsed time and useful bandwidth must be checked for run-to-run stability before their counts are combined.</p>
 
+  <h2>Retained first attempt: multiplexed RPQ capture</h2>
+  <p>The first RPQ experiment requested all eight insert and occupancy events in one <code>perf stat</code> invocation. Every event ran for only about 50% of the enabled interval. These results are retained rather than discarded because they demonstrate both the usefulness and the danger of multiplexed PMU measurements.</p>
+  <table>
+    <tr><th>Cores</th><th>Kernel time</th><th>Useful bandwidth</th><th>Total RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th><th>Event running time</th></tr>
+    <tr><td>8</td><td>5.191 s</td><td>92.474 GB/s</td><td>7,158,294,747</td><td>381,339,939,041</td><td>53.3 ticks/request</td><td>~50%</td></tr>
+    <tr><td>16</td><td>3.304 s</td><td>145.275 GB/s</td><td>4,859,861,552</td><td>634,843,333,387</td><td>130.6 ticks/request</td><td>~50%</td></tr>
+    <tr><td>32</td><td>3.062 s</td><td>156.760 GB/s</td><td>4,767,460,818</td><td>733,229,833,850</td><td>153.8 ticks/request</td><td>~50%</td></tr>
+  </table>
+
+  <h3>Measured distortion versus the corrected split-pass runs</h3>
+  <table>
+    <tr><th>Cores</th><th>Multiplexed useful BW</th><th>Corrected mean useful BW</th><th>Workload slowdown</th><th>Multiplexed occupancy/insert</th><th>Corrected mean occupancy/insert</th><th>Ratio difference</th></tr>
+    <tr><td>8</td><td>92.474 GB/s</td><td>104.636 GB/s</td><td>−11.62%</td><td>53.3</td><td>55.2</td><td>−3.55%</td></tr>
+    <tr><td>16</td><td>145.275 GB/s</td><td>156.878 GB/s</td><td>−7.40%</td><td>130.6</td><td>133.2</td><td>−1.90%</td></tr>
+    <tr><td>32</td><td>156.760 GB/s</td><td>162.921 GB/s</td><td>−3.78%</td><td>153.8</td><td>155.0</td><td>−0.77%</td></tr>
+  </table>
+
+  <h3>Learning from the distorted measurement</h3>
+  <ul>
+    <li>The multiplexed counts preserved the correct qualitative trend because STREAM traffic was steady and all events had nearly equal running percentages.</li>
+    <li><code>perf</code> scaling did not make the experiment equivalent to a native measurement: the profiling setup measurably slowed the workload.</li>
+    <li>The distortion was largest at eight cores, so profiler overhead was not a fixed percentage and could have biased comparisons across core counts.</li>
+    <li>Ratios of similarly multiplexed events were more robust than absolute execution time, but still differed from the corrected result by as much as 3.55%.</li>
+    <li>Always inspect the percentage printed beside a <code>perf stat</code> event. A value materially below 100% means the event was multiplexed.</li>
+    <li>When possible, reduce each pass to the available hardware-counter capacity and validate that benchmark performance matches an unprofiled baseline.</li>
+    <li>Keep both the first attempt and corrected experiment in the report so the methodology remains auditable.</li>
+  </ul>
+
   <h2>Read-pending queue occupancy</h2>
   <table>
     <tr><th>Cores</th><th>Pass</th><th>Useful bandwidth</th><th>RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th><th>Status</th></tr>
