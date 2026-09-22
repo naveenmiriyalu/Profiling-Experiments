@@ -498,13 +498,15 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
   <h2>Read-pending queue occupancy</h2>
   <table>
-    <tr><th>Cores</th><th>Useful bandwidth during capture</th><th>Total RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th></tr>
-    <tr><td>8</td><td>92.474 GB/s</td><td>7,158,294,747</td><td>381,339,939,041</td><td>53.3 ticks/request</td></tr>
-    <tr><td>16</td><td>145.275 GB/s</td><td>4,859,861,552</td><td>634,843,333,387</td><td>130.6 ticks/request</td></tr>
-    <tr><td>32</td><td>156.760 GB/s</td><td>4,767,460,818</td><td>733,229,833,850</td><td>153.8 ticks/request</td></tr>
+    <tr><th>Cores</th><th>Pass</th><th>Useful bandwidth</th><th>RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th><th>Status</th></tr>
+    <tr><td>8</td><td>Scheduler 0</td><td>104.165 GB/s</td><td>3,615,047,911</td><td>201,682,155,325</td><td>55.8 ticks/request</td><td>Non-multiplexed</td></tr>
+    <tr><td>8</td><td>Scheduler 1</td><td>105.106 GB/s</td><td>3,616,047,284</td><td>197,706,062,231</td><td>54.7 ticks/request</td><td>Non-multiplexed</td></tr>
+    <tr><td>16</td><td>Scheduler 0</td><td>157.025 GB/s</td><td>2,455,705,902</td><td>327,030,444,060</td><td>133.2 ticks/request</td><td>Non-multiplexed</td></tr>
+    <tr><td>16</td><td>Scheduler 1</td><td>156.731 GB/s</td><td>2,450,367,162</td><td>326,254,550,967</td><td>133.1 ticks/request</td><td>Non-multiplexed</td></tr>
+    <tr><td>32</td><td>Combined original capture</td><td>156.760 GB/s</td><td>4,767,460,818</td><td>733,229,833,850</td><td>153.8 ticks/request</td><td>50% multiplexed; validation pending</td></tr>
   </table>
-  <p>The occupancy-to-insert ratio is a normalized queue-residence indicator: accumulated request-occupancy ticks divided by inserted requests. It rises about 2.5× from 8 to 16 cores and continues upward at 32 cores. This is consistent with increasing memory-controller queueing as the SNC domain approaches bandwidth saturation.</p>
-  <p><strong>Measurement caveat:</strong> all eight events were collected together and each ran for only about 50% of the interval. The profiled workload was also slower than the clean sweep. Treat the trend as preliminary rather than an absolute latency measurement. The automated <code>rpq</code> mode now collects one scheduler per pass—four events—to avoid this multiplexing.</p>
+  <p>The occupancy-to-insert ratio is a normalized queue-residence indicator: accumulated request-occupancy ticks divided by inserted requests. The non-multiplexed result rises from approximately 55 ticks/request at eight cores to 133 ticks/request at sixteen cores, about 2.4×. Scheduler 0 and scheduler 1 agree closely, and the useful bandwidth matches the clean sweep, supporting a real queueing increase rather than profiler distortion. The original 32-core result continues the trend but still requires split-pass validation.</p>
+  <p><strong>Measurement status:</strong> the original eight-event capture ran each event for about 50% of the interval and slowed the workload. The split-scheduler captures eliminate the displayed multiplexing and restore clean-sweep performance at eight and sixteen cores. Because scheduler passes are separate executions, compare their normalized ratios and verify run stability rather than summing their raw totals as though they came from one execution.</p>
   <pre><code>bash run_stream_rpq.sh
 
 # Equivalent shared-driver invocation:
@@ -540,7 +542,7 @@ bash run_stream_analysis.sh nt-compare</code></pre>
     <li>Completed: explicit subchannel CAS sweep at 8, 16, and 32 cores.</li>
     <li>Completed: separate regular and underfill reads; underfill is only about 0.63% and does not explain the eight-core traffic.</li>
     <li>Completed: compare temporal and explicit non-temporal Triad stores; the removed eight-core read volume matches one output-array RFO stream.</li>
-    <li>Preliminary: RPQ occupancy per insert rises strongly with core count; rerun the new split-scheduler mode to remove 50% event multiplexing.</li>
+    <li>Partially completed: non-multiplexed RPQ measurements validate the 8-to-16-core queueing increase; the 32-core split-pass result remains to be recorded.</li>
     <li>Follow-up: collect and normalize WPQ occupancy to study write-drain pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
