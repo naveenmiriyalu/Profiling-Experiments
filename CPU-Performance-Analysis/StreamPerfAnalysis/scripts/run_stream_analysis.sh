@@ -66,6 +66,36 @@ fi
 
 mkdir -p "$RESULTS_DIR"
 
+require_command()
+{
+    local command_name="$1"
+    command -v "$command_name" >/dev/null 2>&1 || {
+        echo "Required command not found: $command_name" >&2
+        exit 1
+    }
+}
+
+validate_pcm()
+{
+    if ! command -v "$PCM_BIN" >/dev/null 2>&1 && [[ ! -x "$PCM_BIN" ]]; then
+        echo "PCM executable not found: $PCM_BIN" >&2
+        echo "Use --pcm-bin-dir /path/to/pcm/bin, --pcm-bin /path/to/pcm-memory, or set PCM_BIN." >&2
+        exit 1
+    fi
+}
+
+preflight()
+{
+    require_command gcc
+    require_command objdump
+    require_command numactl
+    require_command perf
+
+    if [[ "$mode" == "pcm" || "$mode" == "all" ]]; then
+        validate_pcm
+    fi
+}
+
 cpu_range()
 {
     local threads="$1"
@@ -83,6 +113,20 @@ build_benchmark()
 
 capture_metadata()
 {
+    {
+        printf 'mode=%s\n' "$mode"
+        printf 'benchmark_source=%s\n' "$BENCHMARK_SOURCE"
+        printf 'benchmark_bin=%s\n' "$BENCHMARK_BIN"
+        printf 'cpu_start=%s\n' "$CPU_START"
+        printf 'mem_node=%s\n' "$MEM_NODE"
+        printf 'elements=%s\n' "$ELEMENTS"
+        printf 'iterations=%s\n' "$ITERATIONS"
+        printf 'long_iterations=%s\n' "$LONG_ITERATIONS"
+        printf 'core_counts=%s\n' "${CORE_COUNTS[*]}"
+        printf 'counter_core_counts=%s\n' "${COUNTER_CORE_COUNTS[*]}"
+        printf 'pcm_bin=%s\n' "$PCM_BIN"
+    } > "$RESULTS_DIR/run_config.txt"
+
     {
         date -u
         uname -a
@@ -181,18 +225,14 @@ run_read_breakdown()
 
 run_pcm()
 {
-    if ! command -v "$PCM_BIN" >/dev/null 2>&1 && [[ ! -x "$PCM_BIN" ]]; then
-        echo "PCM executable not found: $PCM_BIN" >&2
-        echo "Use --pcm-bin-dir /path/to/pcm/bin, --pcm-bin /path/to/pcm-memory, or set PCM_BIN." >&2
-        return 1
-    fi
-
     for kernel in copy scale add triad; do
         local output="$RESULTS_DIR/pcm_${kernel}_32c.txt"
 
         "$PCM_BIN" 0 --             numactl --physcpubind="$(cpu_range 32)" --membind="$MEM_NODE"             env OMP_NUM_THREADS=32                 OMP_PLACES=cores                 OMP_PROC_BIND=close             "$BENCHMARK_BIN" "$kernel" "$ITERATIONS" "$ELEMENTS"             > "$output" 2>&1
     done
 }
+
+preflight
 
 case "$mode" in
     build)
