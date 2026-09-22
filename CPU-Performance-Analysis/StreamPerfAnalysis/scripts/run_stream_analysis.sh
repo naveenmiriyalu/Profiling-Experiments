@@ -9,6 +9,10 @@ set -euo pipefail
 #   ./run_stream_analysis.sh tma
 #   ./run_stream_analysis.sh cas
 #   ./run_stream_analysis.sh rpq
+#   ./run_stream_analysis.sh wpq
+#   ./run_stream_analysis.sh dram-pages
+#   ./run_stream_analysis.sh core-events
+#   ./run_stream_analysis.sh extended-counters
 #   ./run_stream_analysis.sh pcm --pcm-bin-dir /path/to/pcm/bin
 #   ./run_stream_analysis.sh all --pcm-bin /path/to/pcm-memory
 #
@@ -49,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -h|--help)
-            echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]"
+            echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|wpq|dram-pages|core-events|extended-counters|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]"
             exit 0
             ;;
         *)
@@ -250,6 +254,73 @@ run_rpq()
     done
 }
 
+run_wpq()
+{
+    # Split by scheduler to avoid multiplexing eight insert/occupancy events.
+    for threads in "${COUNTER_CORE_COUNTS[@]}"; do
+        local cpus
+        cpus="$(cpu_range "$threads")"
+
+        for scheduler in 0 1; do
+            perf stat -a -o "$RESULTS_DIR/wpq_sch${scheduler}_${threads}c.txt" \
+                -e "unc_m_wpq_inserts.sch${scheduler}_pch0" \
+                -e "unc_m_wpq_inserts.sch${scheduler}_pch1" \
+                -e "unc_m_wpq_occupancy_sch${scheduler}_pch0" \
+                -e "unc_m_wpq_occupancy_sch${scheduler}_pch1" -- \
+                numactl --physcpubind="$cpus" --membind="$MEM_NODE" \
+                env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
+                "$BENCHMARK_BIN" triad "$ITERATIONS" "$ELEMENTS" \
+                > "$RESULTS_DIR/wpq_sch${scheduler}_${threads}c_benchmark.txt"
+        done
+    done
+}
+
+run_dram_pages()
+{
+    for threads in "${COUNTER_CORE_COUNTS[@]}"; do
+        local cpus
+        cpus="$(cpu_range "$threads")"
+
+        perf stat -a -o "$RESULTS_DIR/dram_pages_${threads}c.txt" \
+            -e unc_m_act_count.rd -e unc_m_act_count.wr \
+            -e unc_m_pre_count.rd -e unc_m_pre_count.wr -- \
+            numactl --physcpubind="$cpus" --membind="$MEM_NODE" \
+            env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
+            "$BENCHMARK_BIN" triad "$ITERATIONS" "$ELEMENTS" \
+            > "$RESULTS_DIR/dram_pages_${threads}c_benchmark.txt"
+    done
+}
+
+run_core_event_pass()
+{
+    local pass_name="$1"
+    local threads="$2"
+    shift 2
+
+    local cpus
+    cpus="$(cpu_range "$threads")"
+
+    # No -a: perf follows the benchmark process and all OpenMP threads.
+    perf stat -o "$RESULTS_DIR/core_${pass_name}_${threads}c.txt" "$@" -- \
+        numactl --physcpubind="$cpus" --membind="$MEM_NODE" \
+        env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
+        "$BENCHMARK_BIN" triad "$ITERATIONS" "$ELEMENTS" \
+        > "$RESULTS_DIR/core_${pass_name}_${threads}c_benchmark.txt"
+}
+
+run_core_events()
+{
+    for threads in "${COUNTER_CORE_COUNTS[@]}"; do
+        run_core_event_pass mpki "$threads" -e cycles -e instructions -e mem_load_retired.l2_miss -e mem_load_retired.l3_miss
+        # Limit each offcore-response pass to two OCR events.
+        run_core_event_pass demand_rfo "$threads" -e cycles -e instructions -e ocr.demand_data_rd.l3_miss -e ocr.demand_rfo.l3_miss
+        run_core_event_pass reads_locality "$threads" -e cycles -e instructions -e ocr.reads_to_core.l3_miss -e ocr.reads_to_core.l3_miss_local
+        run_core_event_pass prefetch "$threads" -e l2_rqsts.demand_data_rd_miss -e l2_rqsts.hwpf_miss -e l2_rqsts.rfo_miss -e l2_rqsts.demand_data_rd_hit
+        run_core_event_pass stalls_mlp "$threads" -e cycles -e memory_activity.stalls_l2_miss -e memory_activity.stalls_l3_miss -e offcore_requests_outstanding.l3_miss_demand_data_rd
+        run_core_event_pass numa_source "$threads" -e mem_load_l3_miss_retired.local_dram -e mem_load_l3_miss_retired.remote_dram -e mem_load_l3_miss_retired.remote_fwd -e mem_load_l3_miss_retired.remote_hitm
+    done
+}
+
 run_pcm()
 {
     for kernel in copy scale add triad; do
@@ -296,6 +367,28 @@ case "$mode" in
         capture_metadata
         run_rpq
         ;;
+    wpq)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_wpq
+        ;;
+    dram-pages)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_dram_pages
+        ;;
+    core-events)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_core_events
+        ;;
+    extended-counters)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_wpq
+        run_dram_pages
+        run_core_events
+        ;;
     pcm)
         [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
         capture_metadata
@@ -311,10 +404,13 @@ case "$mode" in
         run_nt_comparison
         run_read_breakdown
         run_rpq
+        run_wpq
+        run_dram_pages
+        run_core_events
         run_pcm
         ;;
     *)
-        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]" >&2
+        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|wpq|dram-pages|core-events|extended-counters|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]" >&2
         exit 2
         ;;
 esac
