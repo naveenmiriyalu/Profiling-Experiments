@@ -13,13 +13,54 @@
     code { background: #f3f5f7; padding: .1rem .3rem; }
     pre { overflow-x: auto; background: #f3f5f7; border: 1px solid #dce2e7; padding: .8rem; }
     .pending { color: #8a5a00; font-weight: 600; }
+    nav.toc { background: #f7fafc; border: 1px solid #ccd3da; border-radius: .4rem; padding: .8rem 1rem; margin: 1rem 0 1.5rem; }
+    nav.toc ul { columns: 2; padding-left: 1.4rem; }
+    nav.toc li { break-inside: avoid; margin: .2rem 0; }
+    details { border: 1px solid #dce2e7; border-radius: .35rem; padding: .55rem .75rem; margin: .7rem 0; }
+    details[open] { background: #fbfcfd; }
+    summary { cursor: pointer; color: #123a63; font-weight: 650; }
+    html { scroll-behavior: smooth; }
+    @media (max-width: 720px) { nav.toc ul { columns: 1; } }
   </style>
 </head>
-<body>
+<body id="top">
   <h1>Granite Rapids STREAM Performance Analysis</h1>
   <p><strong>Status:</strong> one-SNC baseline complete. Follow-up socket and system scaling experiments are listed at the end.</p>
+  <nav class="toc" aria-label="Table of contents">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#executive-conclusions">Executive conclusions</a></li>
+      <li><a href="#system-summary">System summary</a></li>
+      <li><a href="#numa-and-capacity">NUMA and capacity</a></li>
+      <li><a href="#available-measurement-tools">Available measurement tools</a></li>
+      <li><a href="#theoretical-memory-bandwidth">Theoretical memory bandwidth</a></li>
+      <li><a href="#snc3-interpretation">SNC3 interpretation</a></li>
+      <li><a href="#stream-kernels-and-traffic-model">STREAM kernels and traffic model</a></li>
+      <li><a href="#stream-result-one-snc-domain">STREAM result: one SNC domain</a></li>
+      <li><a href="#intel-pcm-source-build">Intel PCM source build</a></li>
+      <li><a href="#pcm-command-original-four-kernel-stream-run">PCM command: original four-kernel STREAM run</a></li>
+      <li><a href="#isolated-stream-kernel-experiment">Isolated STREAM-kernel experiment</a></li>
+      <li><a href="#long-duration-triad-validation">Long-duration Triad validation</a></li>
+      <li><a href="#triad-core-count-scaling">Triad core-count scaling</a></li>
+      <li><a href="#top-down-results-8-16-and-32-cores">Top-Down results: 8, 16, and 32 cores</a></li>
+      <li><a href="#available-gnr-performance-counters">Available GNR performance counters</a></li>
+      <li><a href="#preliminary-generic-imc-cas-results-and-gnr-nuance">Preliminary generic IMC CAS results and GNR nuance</a></li>
+      <li><a href="#regular-versus-underfill-read-breakdown">Regular versus underfill read breakdown</a></li>
+      <li><a href="#corrected-cas-sweep-across-core-counts">Corrected CAS sweep across core counts</a></li>
+      <li><a href="#validated-16-core-subchannel-cas-measurement">Validated 16-core subchannel CAS measurement</a></li>
+      <li><a href="#gnr-cas-event-definitions">GNR CAS event definitions</a></li>
+      <li><a href="#core-cache-offcore-and-stall-event-inventory">Core-cache, offcore, and stall event inventory</a></li>
+      <li><a href="#analysis-script-organization">Analysis script organization</a></li>
+      <li><a href="#how-to-interpret-rpq-counters-and-multiplexing">How to interpret RPQ counters and multiplexing</a></li>
+      <li><a href="#retained-first-attempt-multiplexed-rpq-capture">Retained first attempt: multiplexed RPQ capture</a></li>
+      <li><a href="#read-pending-queue-occupancy">Read-pending queue occupancy</a></li>
+      <li><a href="#temporal-versus-non-temporal-triad">Temporal versus non-temporal Triad</a></li>
+      <li><a href="#baseline-status-and-follow-up-experiments">Baseline status and follow-up experiments</a></li>
+    </ul>
+  </nav>
 
-  <h2>Executive conclusions</h2>
+
+  <h2 id="executive-conclusions">Executive conclusions</h2>
   <ul>
     <li>One SNC3 domain contains 32 physical cores and four DDR5-6400 channels, giving a theoretical 204.8 GB/s peak.</li>
     <li>Triad reaches 165.947 GB/s useful bandwidth, about 81.0% of that theoretical channel peak, and is effectively saturated by 16–24 cores.</li>
@@ -29,7 +70,7 @@
     <li>At 16 cores, temporal stores already avoid nearly all of that RFO traffic, so explicit non-temporal stores provide no further speedup.</li>
   </ul>
 
-  <h2>System summary</h2>
+  <h2 id="system-summary">System summary</h2>
   <table>
     <tr><th>Item</th><th>Observed value</th></tr>
     <tr><td>Operating system</td><td>Red Hat Enterprise Linux 9.9 Beta (Plow)</td></tr>
@@ -49,7 +90,7 @@
     <tr><td>Huge pages</td><td>No explicit 2 MiB huge pages reserved; transparent huge-page usage observed</td></tr>
   </table>
 
-  <h2>NUMA and capacity</h2>
+  <h2 id="numa-and-capacity">NUMA and capacity</h2>
   <table>
     <tr><th>Node</th><th>Socket</th><th>Physical CPUs</th><th>SMT sibling CPUs</th><th>Capacity (MB)</th><th>Free (MB)</th></tr>
     <tr><td>0</td><td>0</td><td>0-31</td><td>192-223</td><td>257,189</td><td>255,692</td></tr>
@@ -61,14 +102,14 @@
     <tr><th colspan="4">Total</th><th>1,547,269</th><th>1,538,540</th></tr>
   </table>
 
-  <h2>Available measurement tools</h2>
+  <h2 id="available-measurement-tools">Available measurement tools</h2>
   <table>
     <tr><th>Available</th><th>Not found</th></tr>
     <tr><td>GCC, numactl, numastat, perf, pcm-memory, pcm-power</td><td>Clang, likwid-perfctr, VTune</td></tr>
   </table>
   <p>Intel PCM originally installed on the host did not recognize CPU model 173. A current source build recognizes the processor as Granite Rapids and reports 12 memory controllers/channels per socket.</p>
 
-  <h2>Theoretical memory bandwidth</h2>
+  <h2 id="theoretical-memory-bandwidth">Theoretical memory bandwidth</h2>
   <p>Useful channel width is 64 bits = 8 bytes. The 80-bit total DIMM width includes ECC and is not used for useful-data bandwidth.</p>
   <table>
     <tr><th>Scope</th><th>Calculation</th><th>Theoretical bandwidth</th></tr>
@@ -79,7 +120,7 @@
   </table>
   <p>The four-channel-per-SNC mapping is the expected uniform division of 12 channels across SNC3; PCM measurements will validate the domain-level behavior.</p>
 
-  <h2>SNC3 interpretation</h2>
+  <h2 id="snc3-interpretation">SNC3 interpretation</h2>
   <p>Sub-NUMA Clustering divides each socket into three NUMA locality domains. Each domain here contains 32 physical cores, their SMT siblings, and roughly 252 GiB of local memory.</p>
   <ul>
     <li>Local-node distance: 10</li>
@@ -88,7 +129,7 @@
   </ul>
   <p>A single-node STREAM run measures one SNC domain. A full-socket run must use all three nodes belonging to that socket and distribute memory pages across those nodes.</p>
 
-  <h2>STREAM kernels and traffic model</h2>
+  <h2 id="stream-kernels-and-traffic-model">STREAM kernels and traffic model</h2>
   <p>STREAM uses double-precision elements (8 bytes each). Reported bandwidth counts useful algorithmic reads and writes.</p>
   <table>
     <tr><th>Kernel</th><th>Operation</th><th>FLOPs/element</th><th>Useful traffic/element</th><th>Primary behavior exercised</th></tr>
@@ -109,7 +150,7 @@
   <p>On x86, generated non-temporal store instructions can be checked with <code>objdump -d -M intel ./stream | grep -i movnt</code>. Disassembly of both the original STREAM executable and the isolated-kernel executable showed ordinary temporal <code>vmovupd</code> stores and no <code>movnt*</code> instructions.</p>
   <p>Despite the temporal stores, the isolated-kernel PCM measurements below do not show an additional destination-line read at DRAM. Ownership is still required in the cache-coherence protocol, but the observed memory-controller traffic is consistent with GNR avoiding the old-data DRAM fetch for these complete cache-line overwrite streams. This is an observed result, not an assumption based only on instruction type.</p>
 
-  <h2>STREAM result: one SNC domain</h2>
+  <h2 id="stream-result-one-snc-domain">STREAM result: one SNC domain</h2>
   <p><strong>Configuration:</strong> NUMA node 0, CPUs 0-31, 32 physical cores, local memory binding, 100,000,000 elements/array, 20 iterations.</p>
   <p><strong>Theoretical SNC-domain ceiling:</strong> 204.8 GB/s (expected four DDR5-6400 channels).</p>
   <table>
@@ -122,7 +163,7 @@
   <p>STREAM reports useful algorithmic bandwidth. Intel PCM will be used next to compare it with actual memory-controller read/write traffic.</p>
 
 
-  <h2>Intel PCM source build</h2>
+  <h2 id="intel-pcm-source-build">Intel PCM source build</h2>
   <p>The packaged PCM build dated 2024-01-25 rejected model 173 as unsupported. The current Intel PCM source build correctly identifies Intel Xeon 6972P as Granite Rapids.</p>
   <pre><code>sudo dnf install -y git cmake gcc gcc-c++ make libasan
 
@@ -134,14 +175,14 @@ cmake --build build --parallel "$(nproc)"
 ./build/bin/pcm-memory --version</code></pre>
   <p>The repository helper is <code>scripts/build_intel_pcm.sh</code>. It clones recursively, configures a Release build, builds in parallel, and records the exact Git revision.</p>
 
-  <h2>PCM command: original four-kernel STREAM run</h2>
+  <h2 id="pcm-command-original-four-kernel-stream-run">PCM command: original four-kernel STREAM run</h2>
   <pre><code>pcm-memory 0 -- \
 numactl --physcpubind=0-31 --membind=0 \
 env OMP_NUM_THREADS=32 OMP_PLACES=cores OMP_PROC_BIND=close \
 ./stream</code></pre>
   <p>The combined run reported 78.895 GB/s system reads, 53.894 GB/s system writes, and 132.788 GB/s total. Because it contains initialization and all four kernels, its aggregate read/write ratio cannot identify the behavior of an individual kernel.</p>
 
-  <h2>Isolated STREAM-kernel experiment</h2>
+  <h2 id="isolated-stream-kernel-experiment">Isolated STREAM-kernel experiment</h2>
   <p>A kernel-selectable benchmark, <code>scripts/stream_single_kernel.c</code>, was added so that PCM can measure Copy, Scale, Add, and Triad separately. Each run uses 200 iterations over 100,000,000 doubles per array (0.745 GiB/array), 32 physical cores from NUMA node 0, and memory allocated on node 0.</p>
 
   <h3>Build and instruction check</h3>
@@ -194,7 +235,7 @@ done</code></pre>
   <p>For all four isolated runs, significant node-0 traffic appears on memory channels 2, 3, 8, and 9. Traffic is balanced closely across those four channels; the remaining socket-0 channels show only background traffic. This validates that NUMA node 0 is one four-channel SNC3 domain with a theoretical ceiling of 204.8 GB/s.</p>
 
 
-  <h2>Long-duration Triad validation</h2>
+  <h2 id="long-duration-triad-validation">Long-duration Triad validation</h2>
   <p>The isolated Triad test was increased from 200 to 2,000 iterations to reduce the influence of process startup and initialization on the PCM interval.</p>
   <pre><code>pcm-memory 0 -- \
 numactl --physcpubind=0-31 --membind=0 \
@@ -210,7 +251,7 @@ env OMP_NUM_THREADS=32 OMP_PLACES=cores OMP_PROC_BIND=close \
   </table>
   <p>The measurements remain essentially unchanged when runtime increases by 10×. Initialization and startup therefore do not explain the gap. The useful Triad rate is 79.4% of the 204.8 GB/s theoretical SNC ceiling, while PCM reports 74.4% of that ceiling as observed memory-controller traffic.</p>
 
-  <h2>Triad core-count scaling</h2>
+  <h2 id="triad-core-count-scaling">Triad core-count scaling</h2>
   <p>The following sweep uses only physical cores 0-31 in NUMA node 0. Each run uses 200 iterations and local allocation on node 0.</p>
   <pre><code>for threads in 1 2 4 8 16 24 32; do
     last_cpu=$((threads - 1))
@@ -258,7 +299,7 @@ perf list | grep -Ei \
 
 
 
-  <h2>Top-Down results: 8, 16, and 32 cores</h2>
+  <h2 id="top-down-results-8-16-and-32-cores">Top-Down results: 8, 16, and 32 cores</h2>
   <p>Each run performs the same Triad work: 200 iterations over 100,000,000 elements, or 480 GB of useful traffic. The reported useful bandwidth below is calculated as <code>480 GB / elapsed seconds</code>.</p>
   <table>
     <tr><th>Cores</th><th>Elapsed</th><th>Useful BW</th><th>Instructions</th><th>IPC</th><th>Average frequency</th><th>Backend Bound</th><th>Memory Bound</th><th>DRAM Bound</th></tr>
@@ -284,7 +325,7 @@ perf list | grep -Ei \
   <p>A core may be Memory Bound before the complete SNC memory subsystem is saturated. At eight cores, individual cores already wait frequently for memory, but adding more cores supplies additional concurrent requests and raises aggregate bandwidth. By 16–32 cores, extra concurrency mostly increases DRAM wait time rather than useful bandwidth.</p>
   <p>The <code>slots</code> count is approximately six times the cycle count, consistent with six Top-Down pipeline slots being classified per cycle on this processor. Top-Down retiring slots are not the same quantity as retired instructions.</p>
 
-  <h2>Available GNR performance counters</h2>
+  <h2 id="available-gnr-performance-counters">Available GNR performance counters</h2>
   <p><code>perf list</code> and the uncore IMC sysfs interfaces confirm that this system exposes both core Top-Down metrics and memory-controller events. Counter collection is separated into passes so limited PMU counters are not unnecessarily multiplexed.</p>
 
   <h3>Counter families and their purpose</h3>
@@ -351,7 +392,7 @@ perf list --details unc_m_wpq_inserts.pch0</code></pre>
   <p>Queue occupancy is an accumulated value, not directly a percentage. Its precise normalization must follow the event definition—typically using controller clock ticks or the corresponding insert count. Queue events will therefore be collected only after their definitions and applicable PMU scopes are verified.</p>
 
 
-  <h2>Preliminary generic IMC CAS results and GNR nuance</h2>
+  <h2 id="preliminary-generic-imc-cas-results-and-gnr-nuance">Preliminary generic IMC CAS results and GNR nuance</h2>
   <p>The first CAS pass used the generic sysfs aliases <code>uncore_imc/cas_count_read/</code> and <code>uncore_imc/cas_count_write/</code>. Perf printed scaled traffic volumes in MiB:</p>
   <table>
     <tr><th>Cores</th><th>Perf elapsed</th><th>Generic read</th><th>Generic write</th><th>Derived total bandwidth</th><th>Status</th></tr>
@@ -384,7 +425,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
 
 
-  <h2>Regular versus underfill read breakdown</h2>
+  <h2 id="regular-versus-underfill-read-breakdown">Regular versus underfill read breakdown</h2>
   <table>
     <tr><th>Cores</th><th>Regular read CAS</th><th>Underfill read CAS</th><th>Underfill share</th></tr>
     <tr><td>8</td><td>7,123,407,330</td><td>44,730,637</td><td>0.62%</td></tr>
@@ -394,7 +435,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>The additional eight-core traffic is classified as regular DRAM reads. This remains consistent with write-allocation/RFO traffic, because an ownership-triggered old-data fetch need not be classified by the IMC as an underfill read. A controlled non-temporal-store variant is required to identify the extra regular reads conclusively.</p>
   <p>The reusable command is now available as <code>run_stream_read_breakdown.sh</code>, and the end-to-end analysis includes this stage.</p>
 
-  <h2>Corrected CAS sweep across core counts</h2>
+  <h2 id="corrected-cas-sweep-across-core-counts">Corrected CAS sweep across core counts</h2>
   <p>The explicit scheduler-0 and scheduler-1 events were collected at 8, 16, and 32 cores. Each CAS is converted using 64 bytes, and bandwidth uses the full perf interval.</p>
   <table>
     <tr><th>Cores</th><th>Total read CAS</th><th>Total write CAS</th><th>Read BW</th><th>Write BW</th><th>Total BW</th><th>Read:write</th></tr>
@@ -406,7 +447,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>The eight-core read:write ratio of 2.90:1 is close to the 3:1 traffic model for Triad with an additional destination RFO read. At 16 and 32 cores, the ratios approach the useful 2:1 model and no full additional DRAM read stream is visible.</p>
   <p><strong>Working hypothesis:</strong> at lower concurrency, ordinary temporal stores produce substantial destination-line read traffic. At higher streaming pressure, GNR avoids or suppresses much of that old-data DRAM fetch for complete-line overwrites. This may be a dynamic write-allocation-evasion behavior. It is not yet treated as proven; the next experiment separates regular reads from underfill reads at 8 and 16 cores.</p>
 
-  <h2>Validated 16-core subchannel CAS measurement</h2>
+  <h2 id="validated-16-core-subchannel-cas-measurement">Validated 16-core subchannel CAS measurement</h2>
   <p>The explicit scheduler/subchannel events resolve the generic-event undercount:</p>
   <table>
     <tr><th>Event</th><th>CAS operations</th><th>Transferred bytes at 64 B/CAS</th></tr>
@@ -429,7 +470,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>The generic 16-core values match the scheduler-0 values after unit conversion. This confirms that <code>uncore_imc/cas_count_read/</code> and <code>uncore_imc/cas_count_write/</code> represented scheduler/subchannel 0 rather than total GNR channel traffic. Total GNR traffic requires summing scheduler 0 and scheduler 1.</p>
   <p>Traffic is exceptionally balanced between the two subchannels: the read-count difference is about 0.005%, and the write-count difference is about 0.002%.</p>
 
-  <h2>GNR CAS event definitions</h2>
+  <h2 id="gnr-cas-event-definitions">GNR CAS event definitions</h2>
   <p><code>perf list --details</code> confirms that the IMC exposes independent events for two scheduler/subchannel domains:</p>
   <table>
     <tr><th>Event</th><th>Encoding</th><th>Meaning</th></tr>
@@ -444,7 +485,68 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p><code>Total writes = sch0.wr + sch1.wr</code></p>
   <p>The narrower <code>rd_reg</code>, <code>rd_underfill</code>, <code>wr_pre</code>, and <code>wr_nonpre</code> events are subdivisions. They are intentionally excluded from the first total-traffic experiment.</p>
 
-  <h2>Analysis script organization</h2>
+
+  <h2 id="core-cache-offcore-and-stall-event-inventory">Core-cache, offcore, and stall event inventory</h2>
+  <p>The following GNR events are available on this system. They are grouped by the performance question they answer. Core events should normally be collected without <code>-a</code> so that <code>perf</code> follows the benchmark process and its OpenMP threads; uncore IMC events require system-wide collection.</p>
+
+  <details>
+    <summary>Demand L2/L3 misses and MPKI</summary>
+    <table>
+      <tr><th>Event</th><th>Meaning</th><th>Important limitation</th></tr>
+      <tr><td><code>mem_load_retired.l2_miss</code></td><td>Retired load instructions whose data source missed L2</td><td>Retired demand loads; not total cache-line traffic</td></tr>
+      <tr><td><code>mem_load_retired.l3_hit</code></td><td>Retired loads supplied by L3</td><td>Does not describe prefetched lines directly</td></tr>
+      <tr><td><code>mem_load_retired.l3_miss</code></td><td>Retired loads whose data source missed L3</td><td>A hardware-prefetched line may make the eventual load hit</td></tr>
+      <tr><td><code>longest_lat_cache.reference</code></td><td>Core-originated cacheable requests referring to L3</td><td>Excludes hardware prefetches to L3</td></tr>
+      <tr><td><code>longest_lat_cache.miss</code></td><td>Core-originated cacheable requests missing L3</td><td>Excludes hardware prefetches to L3</td></tr>
+    </table>
+    <p><code>L3 MPKI = 1000 × mem_load_retired.l3_miss / instructions</code>. For STREAM this is a demand-load metric, not a substitute for CAS-derived DRAM traffic, because successful prefetching can lower retired-load MPKI while DRAM traffic remains high.</p>
+  </details>
+
+  <details>
+    <summary>Request-type and prefetch events</summary>
+    <table>
+      <tr><th>Event</th><th>Meaning</th><th>Use</th></tr>
+      <tr><td><code>l2_rqsts.demand_data_rd_miss</code></td><td>Demand data reads missing L2</td><td>Demand stream pressure below L2</td></tr>
+      <tr><td><code>l2_rqsts.hwpf_miss</code></td><td>Hardware-prefetch requests missing L2</td><td>Evidence of prefetch-generated lower-level traffic</td></tr>
+      <tr><td><code>l2_rqsts.rfo_miss</code></td><td>RFO requests missing L2</td><td>Core-side write-allocation pressure</td></tr>
+      <tr><td><code>ocr.demand_data_rd.l3_miss</code></td><td>Demand data reads not supplied by local core caches or L3</td><td>Demand read misses leaving the cache hierarchy</td></tr>
+      <tr><td><code>ocr.demand_rfo.l3_miss</code></td><td>Demand RFO and PREFETCHW requests missing L3</td><td>Directly complements the temporal-versus-NT experiment</td></tr>
+      <tr><td><code>ocr.reads_to_core.l3_miss</code></td><td>Data, code, RFO, and prefetch requests missing L3</td><td>Broader traffic view including prefetches</td></tr>
+      <tr><td><code>ocr.reads_to_core.l3_miss_local</code></td><td>Those misses for locally homed lines</td><td>Local-homing validation in SNC mode</td></tr>
+      <tr><td><code>ocr.reads_to_core.l3_miss_local_socket</code></td><td>L3 misses supplied by the local socket, including another SNC cluster</td><td>Distinguishes socket-local service from strict local homing</td></tr>
+    </table>
+  </details>
+
+  <details>
+    <summary>Local/remote source, stalls, and outstanding requests</summary>
+    <table>
+      <tr><th>Event</th><th>Meaning</th></tr>
+      <tr><td><code>mem_load_l3_miss_retired.local_dram</code></td><td>Retired L3-missing loads served by local DRAM</td></tr>
+      <tr><td><code>mem_load_l3_miss_retired.remote_dram</code></td><td>Retired L3-missing loads served by remote DRAM</td></tr>
+      <tr><td><code>mem_load_l3_miss_retired.remote_fwd</code></td><td>Retired misses forwarded from a remote cache</td></tr>
+      <tr><td><code>mem_load_l3_miss_retired.remote_hitm</code></td><td>Retired misses receiving modified data from a remote cache</td></tr>
+      <tr><td><code>memory_activity.stalls_l2_miss</code></td><td>Execution stalls while an L2-missing demand load is outstanding</td></tr>
+      <tr><td><code>memory_activity.stalls_l3_miss</code></td><td>Execution stalls while an L3-missing demand load is outstanding</td></tr>
+      <tr><td><code>cycle_activity.cycles_l2_miss</code></td><td>Cycles with an outstanding L2-missing demand load</td></tr>
+      <tr><td><code>cycle_activity.cycles_l3_miss</code></td><td>Cycles with an outstanding L3-missing demand load</td></tr>
+      <tr><td><code>offcore_requests_outstanding.l3_miss_demand_data_rd</code></td><td>Accumulated number of outstanding demand-data L3 misses per cycle</td></tr>
+      <tr><td><code>offcore_requests_outstanding.cycles_with_l3_miss_demand_data_rd</code></td><td>Cycles with at least one such request pending</td></tr>
+    </table>
+  </details>
+
+  <details>
+    <summary>Planned non-multiplexed core-event passes</summary>
+    <ol>
+      <li><strong>MPKI pass:</strong> <code>cycles</code>, <code>instructions</code>, <code>mem_load_retired.l2_miss</code>, and <code>mem_load_retired.l3_miss</code>.</li>
+      <li><strong>Demand/RFO pass:</strong> <code>longest_lat_cache.miss</code>, <code>ocr.demand_data_rd.l3_miss</code>, <code>ocr.demand_rfo.l3_miss</code>, and <code>ocr.reads_to_core.l3_miss</code>.</li>
+      <li><strong>Prefetch pass:</strong> <code>l2_rqsts.demand_data_rd_miss</code>, <code>l2_rqsts.hwpf_miss</code>, <code>l2_rqsts.rfo_miss</code>, and <code>l2_rqsts.demand_data_rd_hit</code>.</li>
+      <li><strong>Stall/MLP pass:</strong> <code>cycles</code>, <code>memory_activity.stalls_l2_miss</code>, <code>memory_activity.stalls_l3_miss</code>, and <code>offcore_requests_outstanding.l3_miss_demand_data_rd</code>.</li>
+      <li><strong>NUMA-source pass:</strong> local DRAM, remote DRAM, remote forwarding, and remote HITM events.</li>
+    </ol>
+    <p>After every pass, inspect event running percentages and compare kernel time/useful bandwidth against the clean baseline. A counter set is not accepted merely because <code>perf</code> produced numbers.</p>
+  </details>
+
+  <h2 id="analysis-script-organization">Analysis script organization</h2>
   <p>Experiments are available as separate entry-point scripts and as one end-to-end workflow. All entry points use the shared <code>run_stream_analysis.sh</code> driver so configuration and commands stay consistent as the analysis evolves.</p>
   <table>
     <tr><th>Script</th><th>Purpose</th></tr>
@@ -465,7 +567,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 
 
 
-  <h2>How to interpret RPQ counters and multiplexing</h2>
+  <h2 id="how-to-interpret-rpq-counters-and-multiplexing">How to interpret RPQ counters and multiplexing</h2>
   <h3>Why perf multiplexed the events</h3>
   <p>An uncore memory-controller PMU has a limited number of programmable hardware counters. The original command requested eight events at once: four RPQ insert events and four RPQ occupancy events. Because all eight could not remain scheduled simultaneously, Linux <code>perf</code> time-shared the available registers between event sets. The approximately <code>(50%)</code> value beside each result means that event was physically active for only about half of the measurement interval.</p>
   <p><code>perf</code> scales a multiplexed count approximately as:</p>
@@ -496,7 +598,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <h3>Why the automated measurement uses two passes</h3>
   <p>The <code>rpq</code> mode collects scheduler 0 and scheduler 1 separately, with four events per pass. This is intended to keep each event near 100% running time and avoid the original 50% multiplexing. The tradeoff is that the schedulers are measured in separate benchmark executions, so their elapsed time and useful bandwidth must be checked for run-to-run stability before their counts are combined.</p>
 
-  <h2>Retained first attempt: multiplexed RPQ capture</h2>
+  <h2 id="retained-first-attempt-multiplexed-rpq-capture">Retained first attempt: multiplexed RPQ capture</h2>
   <p>The first RPQ experiment requested all eight insert and occupancy events in one <code>perf stat</code> invocation. Every event ran for only about 50% of the enabled interval. These results are retained rather than discarded because they demonstrate both the usefulness and the danger of multiplexed PMU measurements.</p>
   <table>
     <tr><th>Cores</th><th>Kernel time</th><th>Useful bandwidth</th><th>Total RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th><th>Event running time</th></tr>
@@ -524,7 +626,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
     <li>Keep both the first attempt and corrected experiment in the report so the methodology remains auditable.</li>
   </ul>
 
-  <h2>Read-pending queue occupancy</h2>
+  <h2 id="read-pending-queue-occupancy">Read-pending queue occupancy</h2>
   <table>
     <tr><th>Cores</th><th>Pass</th><th>Useful bandwidth</th><th>RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th><th>Status</th></tr>
     <tr><td>8</td><td>Scheduler 0</td><td>104.165 GB/s</td><td>3,615,047,911</td><td>201,682,155,325</td><td>55.8 ticks/request</td><td>Non-multiplexed</td></tr>
@@ -541,7 +643,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 # Equivalent shared-driver invocation:
 bash run_stream_analysis.sh rpq</code></pre>
 
-  <h2>Temporal versus non-temporal Triad</h2>
+  <h2 id="temporal-versus-non-temporal-triad">Temporal versus non-temporal Triad</h2>
   <p>The explicit AVX-512 variant was verified in the disassembly by the presence of <code>vmovntpd</code>. Both variants then ran the same 200-iteration, 100,000,000-element Triad workload with explicit subchannel CAS counters.</p>
   <table>
     <tr><th>Cores</th><th>Store type</th><th>Kernel time</th><th>Useful bandwidth</th><th>Read traffic</th><th>Write traffic</th><th>Read:write</th><th>CAS rate*</th></tr>
@@ -558,7 +660,7 @@ bash run_stream_analysis.sh rpq</code></pre>
 # Or invoke the shared driver:
 bash run_stream_analysis.sh nt-compare</code></pre>
 
-  <h2>Baseline status and follow-up experiments</h2>
+  <h2 id="baseline-status-and-follow-up-experiments">Baseline status and follow-up experiments</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
     <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
