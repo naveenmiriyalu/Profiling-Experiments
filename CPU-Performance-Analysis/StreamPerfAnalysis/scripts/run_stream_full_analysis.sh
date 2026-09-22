@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # End-to-end GNR STREAM analysis:
-# build + metadata + core sweep + long Triad + TMA + CAS + PCM.
+# build + metadata + sweep + long Triad + TMA + CAS + NT/RFO + read breakdown + RPQ + PCM.
 #
 # Example:
 #   bash run_stream_full_analysis.sh --pcm-bin-dir /opt/pcm/build/bin
