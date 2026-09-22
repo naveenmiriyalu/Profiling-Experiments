@@ -449,9 +449,27 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>Individual example:</p>
   <pre><code>bash run_stream_cas.sh</code></pre>
   <p>End-to-end example:</p>
-  <pre><code>PCM_BIN=/home/nmiriyal/CPU-BENCHMARK/pcm/build/bin/pcm-memory \
-bash run_stream_full_analysis.sh</code></pre>
-  <p>Each invocation creates a timestamped results directory under <code>StreamPerfAnalysis/results/</code>. Environment variables such as <code>CPU_START</code>, <code>MEM_NODE</code>, <code>ELEMENTS</code>, <code>ITERATIONS</code>, <code>LONG_ITERATIONS</code>, and <code>PCM_BIN</code> can override defaults.</p>
+  <pre><code>bash run_stream_full_analysis.sh \
+  --pcm-bin-dir /home/nmiriyal/CPU-BENCHMARK/pcm/build/bin</code></pre>
+  <p>Each invocation creates a timestamped results directory under <code>StreamPerfAnalysis/results/</code>. Environment variables such as <code>CPU_START</code>, <code>MEM_NODE</code>, <code>ELEMENTS</code>, <code>ITERATIONS</code>, <code>LONG_ITERATIONS</code>, <code>PCM_BIN</code>, and <code>PCM_BIN_DIR</code> can override defaults. The wrappers also accept <code>--pcm-bin-dir DIR</code> or <code>--pcm-bin FILE</code>.</p>
+
+
+  <h2>Temporal versus non-temporal Triad</h2>
+  <p>The explicit AVX-512 variant was verified in the disassembly by the presence of <code>vmovntpd</code>. Both variants then ran the same 200-iteration, 100,000,000-element Triad workload with explicit subchannel CAS counters.</p>
+  <table>
+    <tr><th>Cores</th><th>Store type</th><th>Read traffic</th><th>Write traffic</th><th>Read:write</th><th>Measured read + write rate</th></tr>
+    <tr><td>8</td><td>Temporal</td><td>458.81 GB</td><td>158.31 GB</td><td>2.90:1</td><td>131.76 GB/s</td></tr>
+    <tr><td>8</td><td>Non-temporal</td><td>298.99 GB</td><td>165.36 GB</td><td>1.81:1</td><td>122.27 GB/s</td></tr>
+    <tr><td>16</td><td>Temporal</td><td>305.15 GB</td><td>159.08 GB</td><td>1.92:1</td><td>149.10 GB/s</td></tr>
+    <tr><td>16</td><td>Non-temporal</td><td>296.50 GB</td><td>165.11 GB</td><td>1.80:1</td><td>146.36 GB/s</td></tr>
+  </table>
+  <p>At eight cores, non-temporal stores remove 159.82 GB of read traffic while retaining the output write stream. This is almost exactly one 160 GB output-array stream: 100,000,000 elements × 8 bytes × 200 iterations. The result strongly identifies the extra temporal-store traffic as write allocation/read-for-ownership rather than IMC underfill.</p>
+  <p>At sixteen cores, temporal Triad already avoids nearly all of that extra read stream. This supports the earlier observation that Granite Rapids can dynamically avoid unnecessary write-allocation traffic for sustained full-line streaming stores. Explicit non-temporal stores make that behavior deterministic.</p>
+  <p><strong>Nuance:</strong> the CAS-derived rates use the complete <code>perf stat</code> wall interval, which includes startup and teardown, whereas the benchmark's useful bandwidth uses its internally timed kernel region. Traffic totals and read:write ratios are therefore the cleaner evidence for this comparison.</p>
+  <pre><code>bash run_stream_nt_comparison.sh
+
+# Or invoke the shared driver:
+bash run_stream_analysis.sh nt-compare</code></pre>
 
   <h2>Planned measurements</h2>
   <ol>
@@ -465,7 +483,7 @@ bash run_stream_full_analysis.sh</code></pre>
     <li>Completed: validate explicit scheduler/subchannel CAS events at 16 cores; total bandwidth agrees with PCM.</li>
     <li>Completed: explicit subchannel CAS sweep at 8, 16, and 32 cores.</li>
     <li>Completed: separate regular and underfill reads; underfill is only about 0.63% and does not explain the eight-core traffic.</li>
-    <li>Next: compare temporal and explicit non-temporal Triad stores to identify the extra regular read stream.</li>
+    <li>Completed: compare temporal and explicit non-temporal Triad stores; the removed eight-core read volume matches one output-array RFO stream.</li>
     <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
