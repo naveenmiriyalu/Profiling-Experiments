@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./run_stream_analysis.sh sweep
 #   ./run_stream_analysis.sh tma
 #   ./run_stream_analysis.sh cas
+#   ./run_stream_analysis.sh rpq
 #   ./run_stream_analysis.sh pcm --pcm-bin-dir /path/to/pcm/bin
 #   ./run_stream_analysis.sh all --pcm-bin /path/to/pcm-memory
 #
@@ -48,7 +49,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -h|--help)
-            echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]"
+            echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]"
             exit 0
             ;;
         *)
@@ -223,6 +224,32 @@ run_read_breakdown()
     done
 }
 
+run_rpq()
+{
+    # Four events per pass avoids the approximately 50% multiplexing seen
+    # when both schedulers' insert and occupancy events are collected together.
+    for threads in "${COUNTER_CORE_COUNTS[@]}"; do
+        local cpus
+        cpus="$(cpu_range "$threads")"
+
+        for scheduler in 0 1; do
+            perf stat -a \
+                -o "$RESULTS_DIR/rpq_sch${scheduler}_${threads}c.txt" \
+                -e "unc_m_rpq_inserts.sch${scheduler}_pch0" \
+                -e "unc_m_rpq_inserts.sch${scheduler}_pch1" \
+                -e "unc_m_rpq_occupancy_sch${scheduler}_pch0" \
+                -e "unc_m_rpq_occupancy_sch${scheduler}_pch1" \
+                -- \
+                numactl --physcpubind="$cpus" --membind="$MEM_NODE" \
+                env OMP_NUM_THREADS="$threads" \
+                    OMP_PLACES=cores \
+                    OMP_PROC_BIND=close \
+                "$BENCHMARK_BIN" triad "$ITERATIONS" "$ELEMENTS" \
+                > "$RESULTS_DIR/rpq_sch${scheduler}_${threads}c_benchmark.txt"
+        done
+    done
+}
+
 run_pcm()
 {
     for kernel in copy scale add triad; do
@@ -264,6 +291,11 @@ case "$mode" in
         capture_metadata
         run_read_breakdown
         ;;
+    rpq)
+        [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
+        capture_metadata
+        run_rpq
+        ;;
     pcm)
         [[ -x "$BENCHMARK_BIN" ]] || build_benchmark
         capture_metadata
@@ -278,10 +310,11 @@ case "$mode" in
         run_cas
         run_nt_comparison
         run_read_breakdown
+        run_rpq
         run_pcm
         ;;
     *)
-        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]" >&2
+        echo "Usage: $0 {build|sweep|tma|cas|nt-compare|read-breakdown|rpq|pcm|all} [--pcm-bin-dir DIR | --pcm-bin FILE]" >&2
         exit 2
         ;;
 esac
