@@ -17,7 +17,17 @@
 </head>
 <body>
   <h1>Granite Rapids STREAM Performance Analysis</h1>
-  <p>Status: working report. Results will be added as experiments complete.</p>
+  <p><strong>Status:</strong> one-SNC baseline complete. Follow-up socket and system scaling experiments are listed at the end.</p>
+
+  <h2>Executive conclusions</h2>
+  <ul>
+    <li>One SNC3 domain contains 32 physical cores and four DDR5-6400 channels, giving a theoretical 204.8 GB/s peak.</li>
+    <li>Triad reaches 165.947 GB/s useful bandwidth, about 81.0% of that theoretical channel peak, and is effectively saturated by 16–24 cores.</li>
+    <li>Top-Down confirms the transition to a DRAM-bound workload: DRAM Bound rises from 54.4% at 8 cores to 85.9% at 32 cores while frequency remains stable.</li>
+    <li>Explicit subchannel CAS events agree with PCM; the generic GNR IMC aliases cover only part of the scheduler/subchannel traffic and must not be treated as totals.</li>
+    <li>At 8 cores, temporal stores generate one extra 160 GB RFO stream. AVX-512 non-temporal stores remove it and improve useful bandwidth by 23.8%.</li>
+    <li>At 16 cores, temporal stores already avoid nearly all of that RFO traffic, so explicit non-temporal stores provide no further speedup.</li>
+  </ul>
 
   <h2>System summary</h2>
   <table>
@@ -454,6 +464,21 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   <p>Each invocation creates a timestamped results directory under <code>StreamPerfAnalysis/results/</code>. Environment variables such as <code>CPU_START</code>, <code>MEM_NODE</code>, <code>ELEMENTS</code>, <code>ITERATIONS</code>, <code>LONG_ITERATIONS</code>, <code>PCM_BIN</code>, and <code>PCM_BIN_DIR</code> can override defaults. The wrappers also accept <code>--pcm-bin-dir DIR</code> or <code>--pcm-bin FILE</code>.</p>
 
 
+
+  <h2>Read-pending queue occupancy</h2>
+  <table>
+    <tr><th>Cores</th><th>Useful bandwidth during capture</th><th>Total RPQ inserts</th><th>Accumulated occupancy</th><th>Occupancy / insert</th></tr>
+    <tr><td>8</td><td>92.474 GB/s</td><td>7,158,294,747</td><td>381,339,939,041</td><td>53.3 ticks/request</td></tr>
+    <tr><td>16</td><td>145.275 GB/s</td><td>4,859,861,552</td><td>634,843,333,387</td><td>130.6 ticks/request</td></tr>
+    <tr><td>32</td><td>156.760 GB/s</td><td>4,767,460,818</td><td>733,229,833,850</td><td>153.8 ticks/request</td></tr>
+  </table>
+  <p>The occupancy-to-insert ratio is a normalized queue-residence indicator: accumulated request-occupancy ticks divided by inserted requests. It rises about 2.5× from 8 to 16 cores and continues upward at 32 cores. This is consistent with increasing memory-controller queueing as the SNC domain approaches bandwidth saturation.</p>
+  <p><strong>Measurement caveat:</strong> all eight events were collected together and each ran for only about 50% of the interval. The profiled workload was also slower than the clean sweep. Treat the trend as preliminary rather than an absolute latency measurement. The automated <code>rpq</code> mode now collects one scheduler per pass—four events—to avoid this multiplexing.</p>
+  <pre><code>bash run_stream_rpq.sh
+
+# Equivalent shared-driver invocation:
+bash run_stream_analysis.sh rpq</code></pre>
+
   <h2>Temporal versus non-temporal Triad</h2>
   <p>The explicit AVX-512 variant was verified in the disassembly by the presence of <code>vmovntpd</code>. Both variants then ran the same 200-iteration, 100,000,000-element Triad workload with explicit subchannel CAS counters.</p>
   <table>
@@ -471,7 +496,7 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
 # Or invoke the shared driver:
 bash run_stream_analysis.sh nt-compare</code></pre>
 
-  <h2>Planned measurements</h2>
+  <h2>Baseline status and follow-up experiments</h2>
   <ol>
     <li>Completed: determine populated channels and configured memory speed.</li>
     <li>Completed: calculate theoretical bandwidth per SNC domain, socket, and system.</li>
@@ -484,7 +509,8 @@ bash run_stream_analysis.sh nt-compare</code></pre>
     <li>Completed: explicit subchannel CAS sweep at 8, 16, and 32 cores.</li>
     <li>Completed: separate regular and underfill reads; underfill is only about 0.63% and does not explain the eight-core traffic.</li>
     <li>Completed: compare temporal and explicit non-temporal Triad stores; the removed eight-core read volume matches one output-array RFO stream.</li>
-    <li>Verify and normalize RPQ/WPQ insert and occupancy events before interpreting queue pressure.</li>
+    <li>Preliminary: RPQ occupancy per insert rises strongly with core count; rerun the new split-scheduler mode to remove 50% event multiplexing.</li>
+    <li>Follow-up: collect and normalize WPQ occupancy to study write-drain pressure.</li>
     <li>Run STREAM across one complete socket using all three local SNC nodes.</li>
     <li>Run STREAM across both sockets with local/interleaved placement.</li>
   </ol>
