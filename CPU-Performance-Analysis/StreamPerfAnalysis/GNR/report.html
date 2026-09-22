@@ -548,6 +548,62 @@ perf list --details unc_m_cas_count_sch1.wr</code></pre>
   </details>
 
 
+
+  <h2 id="core-pmu-scaling-diagnosis">Core PMU scaling diagnosis: 8, 16, and 32 cores</h2>
+  <p>This section correlates wall-clock scaling with core PMU data for the fixed-work Triad experiment. The same problem size and iteration count are used at each core count, with CPUs and memory pinned to NUMA node 0.</p>
+
+  <table>
+    <tr><th>Cores</th><th>Runtime (s)</th><th>Speedup vs 8c</th><th>Instructions</th><th>IPC</th></tr>
+    <tr><td>8</td><td>4.673</td><td>1.00×</td><td>15.77 B</td><td>0.14</td></tr>
+    <tr><td>16</td><td>3.140</td><td>1.49×</td><td>16.06 B</td><td>0.10</td></tr>
+    <tr><td>32</td><td>2.960</td><td>1.58×</td><td>15.92 B</td><td>0.05</td></tr>
+  </table>
+
+  <p>The instruction count remains essentially constant at about 16 billion instructions, confirming that this is a strong-scaling experiment rather than an increasing-workload experiment. Runtime improves substantially from 8 to 16 cores, but doubling again from 16 to 32 cores reduces runtime by only about 5.7%. The scaling curve is therefore flattening sharply by 16–32 cores.</p>
+
+  <h3>Memory-stall trend</h3>
+  <table>
+    <tr><th>Cores</th><th>Cycles</th><th>L2-miss stall cycles</th><th>L2 stall / cycles</th><th>L3-miss stall cycles</th><th>L3 stall / cycles</th></tr>
+    <tr><td>8</td><td>115.71 B</td><td>88.87 B</td><td>76.8%</td><td>62.92 B</td><td>54.4%</td></tr>
+    <tr><td>16</td><td>155.03 B</td><td>138.44 B</td><td>89.3%</td><td>123.01 B</td><td>79.3%</td></tr>
+    <tr><td>32</td><td>292.04 B</td><td>275.46 B</td><td>94.3%</td><td>250.32 B</td><td>85.7%</td></tr>
+  </table>
+
+  <p>The fraction of counted cycles associated with outstanding L2 and L3 misses rises sharply with core count. These events should not be read as literal wall-clock idle percentages, but the trend is clear: memory-related backend pressure increases substantially as more cores are added.</p>
+
+  <h3>Outstanding L3-miss demand reads and MLP proxy</h3>
+  <table>
+    <tr><th>Cores</th><th><code>offcore_requests_outstanding.l3_miss_demand_data_rd</code></th><th>Counter / cycles</th></tr>
+    <tr><td>8</td><td>510.76 B</td><td>4.41</td></tr>
+    <tr><td>16</td><td>1,377.25 B</td><td>8.88</td></tr>
+    <tr><td>32</td><td>1,784.68 B</td><td>6.11</td></tr>
+  </table>
+
+  <p>The outstanding-request event is an occupancy-style counter, so dividing by cycles gives a useful average-outstanding-request proxy. It rises strongly from 8 to 16 cores, consistent with increased memory-level parallelism and greater pressure on the memory subsystem. The 32-core value should be interpreted cautiously because event aggregation and PMU semantics can affect a system-wide reading; the runtime and stall trends remain the more robust evidence of saturation.</p>
+
+  <h3>NUMA locality validation</h3>
+  <table>
+    <tr><th>Cores</th><th>L3-miss reads to core</th><th>Local L3-miss reads</th><th>Locality</th></tr>
+    <tr><td>8</td><td>5.9649 B</td><td>5.9647 B</td><td>99.996%</td></tr>
+    <tr><td>16</td><td>4.7215 B</td><td>4.7211 B</td><td>99.992%</td></tr>
+    <tr><td>32</td><td>4.6062 B</td><td>4.6047 B</td><td>99.967%</td></tr>
+  </table>
+
+  <p>NUMA locality is effectively perfect at all three core counts. The <code>--physcpubind</code> and <code>--membind=0</code> placement is therefore working as intended, and remote-memory traffic can be ruled out as the cause of the 16-to-32-core scaling collapse.</p>
+
+  <h3>Prefetch-related observations</h3>
+  <table>
+    <tr><th>Cores</th><th>Demand-data read misses</th><th>HW-prefetch misses</th><th>RFO misses</th></tr>
+    <tr><td>8</td><td>243 M</td><td>7.05 B</td><td>295 M</td></tr>
+    <tr><td>16</td><td>241 M</td><td>4.92 B</td><td>2.42 B</td></tr>
+    <tr><td>32</td><td>290 M</td><td>4.75 B</td><td>2.56 B</td></tr>
+  </table>
+
+  <p>The hardware-prefetch miss counter should not be interpreted as “bad prefetches”; it indicates the lookup outcome for hardware-prefetch requests and can represent useful lines fetched from below L2. Prefetch usefulness and timeliness require comparison against demand behavior and, ideally, a prefetch-disabled experiment. The large RFO-miss discontinuity between 8 and 16 cores should also be verified for repeatability and exact GNR event semantics before assigning a microarchitectural explanation.</p>
+
+  <h3>Current diagnosis</h3>
+  <p>The combined evidence is internally consistent: the workload performs essentially the same amount of instruction work at every core count, NUMA locality remains local, memory-stall fractions rise sharply, and runtime scaling flattens after 16 cores. This strongly indicates that the Triad run is transitioning from useful core scaling into a shared memory-system bottleneck. Direct IMC/subchannel bandwidth measurements are the final confirmation step for locating the saturation point and relating useful STREAM bandwidth to physical DRAM traffic.</p>
+
   <h2 id="full-captured-perf-event-inventory">Full captured perf event inventory</h2>
   <p>This appendix preserves the complete filtered <code>perf list --details</code> output captured on the Xeon 6972P system. It is intentionally retained verbatim for future cache, prefetch, RFO, NUMA-source, stall, MLP, CHA/TOR, and Top-Down experiments. Event availability and encodings are platform- and kernel-dependent, so this machine-local inventory is more reliable than assuming another system exposes identical aliases.</p>
   <details>
