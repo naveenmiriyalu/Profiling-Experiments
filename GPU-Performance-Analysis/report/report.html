@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPU Performance & Architecture Study</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;max-width:1100px;margin:40px auto;padding:0 24px;line-height:1.55;color:#202124}
+h1,h2,h3{line-height:1.2} code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace} pre{background:#f6f8fa;padding:16px;overflow:auto;border-radius:8px}
+table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #d0d7de;padding:8px;text-align:right}th:first-child,td:first-child{text-align:left}
+.note{border-left:4px solid #888;padding:8px 16px;background:#f6f8fa}.pending{font-style:italic}
+</style></head><body>
+<h1>GPU Performance & Architecture Study</h1>
+<p>Living report for GPU microarchitecture experiments, hardware profiling, ISA analysis, trace-driven simulation, LLM prefill/decode, and graphics. Initial hardware target: NVIDIA H200; comparative target: AMD MI355X.</p>
+<h2>Part I — GPU Architecture Foundations</h2>
+<h3>1. Thread → Block → Warp → Lane</h3>
+<p>A CUDA kernel is launched as a grid of blocks. Threads have a block-local <code>threadIdx</code>; a common 1-D global index is <code>blockIdx.x * blockDim.x + threadIdx.x</code>. NVIDIA groups 32 threads into a warp. The lane is the thread's position inside that warp.</p>
+<h3>2. Global Memory Access & Coalescing</h3>
+<p>For FP32, one lane requests 4 B. A full 32-lane warp performing a contiguous load therefore requests 128 useful bytes.</p>
+<pre>32 lanes × 4 B = 128 useful B</pre>
+<p>For our Hopper experiment, we begin with a 32-B sector mental model. Eight adjacent FP32 lane accesses fit in one sector.</p>
+<table><tr><th>Stride</th><th>Lane spacing</th><th>Lanes / sector</th><th>Sectors / warp</th><th>Sector bytes</th><th>Useful efficiency</th></tr>
+<tr><td>1</td><td>4 B</td><td>8</td><td>4</td><td>128 B</td><td>100%</td></tr>
+<tr><td>2</td><td>8 B</td><td>4</td><td>8</td><td>256 B</td><td>50%</td></tr>
+<tr><td>4</td><td>16 B</td><td>2</td><td>16</td><td>512 B</td><td>25%</td></tr>
+<tr><td>8</td><td>32 B</td><td>1</td><td>32</td><td>1024 B</td><td>12.5%</td></tr>
+<tr><td>16</td><td>64 B</td><td>≤1</td><td>32</td><td>1024 B</td><td>12.5%</td></tr>
+<tr><td>32</td><td>128 B</td><td>≤1</td><td>32</td><td>1024 B</td><td>12.5%</td></tr></table>
+<div class="note"><strong>Important:</strong> useful bytes, sector bytes, cache traffic and actual HBM traffic are distinct quantities. The experiment will test how the simple prediction maps onto real H200 behavior.</div>
+<h3>3. Alignment</h3>
+<p>An aligned contiguous 128-B warp load can occupy four 32-B sectors. Shifting the same access by 4 B can make it touch five sectors, giving 128/(5×32) = 80% simple useful-byte efficiency.</p>
+<h2>Experiment 1 — SM-driven stride read</h2>
+<p><code>out[i] = in[i * stride]</code></p>
+<p>Initial configuration: FP32, 100,000,000 outputs, stride 1, 256 threads/block. Each output represents 4 B of useful input read plus 4 B of useful output write, or 0.8 GB application-level useful traffic for the full run.</p>
+<h3>Prediction → Measurement → Correlation</h3>
+<p class="pending">H200 timing, PTX/SASS and NCU results pending.</p>
+<h2>Roadmap</h2>
+<p>Memory bandwidth/coalescing → latency/pointer chase → MLP → cache/working-set → compute dependency/ILP → H200 vs MI355X → trace-driven simulation → LLM prefill/decode → graphics.</p>
+</body></html>
