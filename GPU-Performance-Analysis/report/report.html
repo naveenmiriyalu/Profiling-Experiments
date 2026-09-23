@@ -438,6 +438,32 @@ until another resource becomes limiting</pre>
 </table>
 <p>The source-attributed L1TEX traffic again matches the hand model exactly: 12.5 M read sectors and 12.5 M write sectors. Therefore the larger ~18.77 M L2 read/write operation counts are not evidence that the coalescer generated extra source requests. They represent additional activity observed at the L2 operation level and require cache-internal decomposition before assigning a precise cause.</p>
 <p>The DRAM read count is also nearly exact: 12,500,480 sectors × 32 B ≈ 400.015 MB, matching the 400 MB useful input stream. The L2 data show that reads are overwhelmingly misses while writes are overwhelmingly lookup hits. The approximately 6.25 M-operation gap between source-attributed sectors and total L2 operations is retained as an investigation item; store allocation/fill/eviction or other internal L2 behavior is a hypothesis to test, not yet a conclusion.</p>
+<h3>Copy versus Triad: a natural MLP experiment</h3>
+<p>Before building an artificial 1/2/4/8-load kernel, we compare the copy-like stride-1 kernel with a standard Triad-shaped kernel:</p>
+<pre>Copy:   A[i] = B[i]
+
+Triad:  A[i] = B[i] + scalar * C[i]</pre>
+<p>Copy exposes one global input load before the dependent output store. Triad exposes two independent input loads, B[i] and C[i], before their values are consumed by arithmetic and the store. The important hypothesis is therefore not merely “Triad moves more bytes,” but that it can expose more independent memory work per warp.</p>
+<table>
+<tr><th>Property</th><th>Copy</th><th>Triad</th></tr>
+<tr><td>Independent input loads/thread</td><td>1</td><td>2</td></tr>
+<tr><td>Useful source traffic/element</td><td>8 B</td><td>12 B</td></tr>
+<tr><td>Coalesced load sectors/warp</td><td>4</td><td>8 total across two loads</td></tr>
+<tr><td>Coalesced store sectors/warp</td><td>4</td><td>4</td></tr>
+<tr><td>Per-warp MLP opportunity</td><td>lower</td><td>higher</td></tr>
+</table>
+<p>Two loads only increase MLP if they are independent. A pointer-dependent second load would serialize behind the first and would not provide the same latency-hiding opportunity.</p>
+<h4>Triad hypothesis</h4>
+<p>Relative to the measured copy kernel (0.38 eligible warps/scheduler, 73.35% no-eligible cycles, strong long-scoreboard pressure, 55.16% DRAM throughput), Triad is expected to provide more outstanding memory work. If insufficient request-level parallelism is the current limitation, Triad should tend to increase eligible/issued work and DRAM utilization and reduce scheduler starvation. This is a prediction to test, not an assumed result.</p>
+<h4>Reusable NCU collection</h4>
+<p>A reusable script, <code>scripts/profile_memory_kernel.sh</code>, now collects the targeted memory hierarchy counters, Scheduler/Warp State sections, and Occupancy section for any benchmark with a warm-up launch followed by the measured launch. It intentionally uses three focused NCU invocations rather than one giant section set; NCU may still replay internally when hardware counters cannot be collected simultaneously.</p>
+<pre>chmod +x scripts/profile_memory_kernel.sh
+
+# Copy/stride kernel
+./scripts/profile_memory_kernel.sh ./stride_read stride1
+
+# Triad
+./scripts/profile_memory_kernel.sh ./triad triad</pre>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
