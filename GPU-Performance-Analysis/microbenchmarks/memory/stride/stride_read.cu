@@ -7,7 +7,7 @@
 do {                                                                       \
     cudaError_t err = (call);                                              \
     if (err != cudaSuccess) {                                              \
-        fprintf(stderr, "CUDA error at %s:%d: %s\\n",                     \
+        fprintf(stderr, "CUDA error at %s:%d: %s\n",                      \
                 __FILE__, __LINE__, cudaGetErrorString(err));              \
         std::exit(EXIT_FAILURE);                                           \
     }                                                                      \
@@ -37,10 +37,10 @@ int main()
     const size_t input_bytes = input_elements * sizeof(float);
     const size_t output_bytes = N * sizeof(float);
 
-    printf("N               : %zu\\n", N);
-    printf("stride          : %d\\n", stride);
-    printf("input size      : %.2f MB\\n", input_bytes / 1.0e6);
-    printf("output size     : %.2f MB\\n", output_bytes / 1.0e6);
+    printf("N               : %zu\n", N);
+    printf("stride          : %d\n", stride);
+    printf("input size      : %.2f MB\n", input_bytes / 1.0e6);
+    printf("output size     : %.2f MB\n", output_bytes / 1.0e6);
 
     float* d_in = nullptr;
     float* d_out = nullptr;
@@ -54,8 +54,8 @@ int main()
     const size_t blocks =
         (N + threads_per_block - 1) / threads_per_block;
 
-    printf("threads/block   : %d\\n", threads_per_block);
-    printf("blocks          : %zu\\n", blocks);
+    printf("threads/block   : %d\n", threads_per_block);
+    printf("blocks          : %zu\n", blocks);
 
     stride_read<<<blocks, threads_per_block>>>(d_in, d_out, N, stride);
     CUDA_CHECK(cudaGetLastError());
@@ -84,9 +84,9 @@ int main()
         useful_bytes / elapsed_seconds / 1.0e9;
 
     printf("\n");
-    printf("Kernel time     : %.3f ms\\n", elapsed_ms);
-    printf("Useful traffic  : %.3f GB\\n", useful_bytes / 1.0e9);
-    printf("Useful bandwidth: %.2f GB/s\\n", useful_GBs);
+    printf("Kernel time     : %.3f ms\n", elapsed_ms);
+    printf("Useful traffic  : %.3f GB\n", useful_bytes / 1.0e9);
+    printf("Useful bandwidth: %.2f GB/s\n", useful_GBs);
 
     CUDA_CHECK(cudaEventDestroy(start));
     CUDA_CHECK(cudaEventDestroy(stop));
