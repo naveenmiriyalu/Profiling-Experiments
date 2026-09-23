@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
-#define CK(x) do{cudaError_t e=(x);if(e!=cudaSuccess){fprintf(stderr,"%s\n",cudaGetErrorString(e));exit(1);}}while(0)
+#define CK(x) do{cudaError_t err=(x);if(err!=cudaSuccess){fprintf(stderr,"%s\n",cudaGetErrorString(err));exit(1);}}while(0)
 __global__ void gemm_naive(const float* __restrict__ A,const float* __restrict__ B,float* __restrict__ C,int M,int N,int K){
  int col=blockIdx.x*blockDim.x+threadIdx.x,row=blockIdx.y*blockDim.y+threadIdx.y;
  if(row<M&&col<N){float sum=0;for(int k=0;k<K;k++)sum=fmaf(A[(size_t)row*K+k],B[(size_t)k*N+col],sum);C[(size_t)row*N+col]=sum;}
