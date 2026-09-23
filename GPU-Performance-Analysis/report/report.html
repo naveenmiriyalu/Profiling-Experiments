@@ -660,6 +660,84 @@ but useful BW falls to 3.87 TB/s.</pre>
 <p>Register usage rises from 8 to 30 registers/thread as more load results and addresses remain live. However, there are zero spills in all variants. At MLP8 the register block limit reaches 8, equal to the warp-derived block limit of 8; theoretical occupancy therefore remains 100%. Achieved occupancy actually rises from MLP4 to MLP8. Consequently the MLP8 regression cannot be explained by register spilling or an occupancy collapse.</p>
 <h4>Current conclusion and remaining hypothesis</h4>
 <p>MLP4 is the observed sweet spot for this benchmark. By MLP4, DRAM is at 85.15% and L2 at 90.58% of the profiler's throughput references. MLP8 adds live state, address-generation/instruction work and request pressure while memory throughput no longer improves. The next collection focuses on load/store instruction pipelines, memory-pipe activity and instruction mix to distinguish a request/LSU pipeline limit from hierarchy saturation or additional instruction overhead. L2 is highly utilized, but 90.58% alone is not sufficient evidence to declare L2 the definitive bottleneck.</p>
+<h3>MLP4 versus MLP8: identical aggregate LSU work</h3>
+<p>The final targeted L1TEX/LSU collection shows that MLP4 and MLP8 both generate 3,125,000 global-load requests, 3,125,000 global-store requests, 3,125,000 load/store output wavefronts, and exactly 400 MB of requested load and store bytes. Thus MLP8 is not slower because it performs more aggregate source memory work.</p>
+<table><tr><th>Metric</th><th>MLP4</th><th>MLP8</th></tr>
+<tr><td>Global load requests</td><td>3,125,000</td><td>3,125,000</td></tr>
+<tr><td>Global store requests</td><td>3,125,000</td><td>3,125,000</td></tr>
+<tr><td>Load output wavefronts</td><td>3,125,000</td><td>3,125,000</td></tr>
+<tr><td>Store output wavefronts</td><td>3,125,000</td><td>3,125,000</td></tr>
+<tr><td>Requested load bytes</td><td>400 MB</td><td>400 MB</td></tr>
+<tr><td>Requested store bytes</td><td>400 MB</td><td>400 MB</td></tr></table>
+<pre>MLP4: 25M / 32 = 781,250 warps; 781,250 × 4 LDGs = 3,125,000
+MLP8: 12.5M / 32 = 390,625 warps; 390,625 × 8 LDGs = 3,125,000</pre>
+<p>The knob therefore changes temporal grouping: MLP8 has roughly half as many warps, each carrying twice as many independent loads and live results. Per-instance reductions also widen at MLP8 (for example load-request min/max roughly 20,800–31,680 versus 23,200–24,576 at MLP4). This is evidence of less-uniform load across the metric's underlying instances, but it is not yet labeled as HBM-channel imbalance; that requires instance-level L2/DRAM verification.</p>
+<h4>Updated elimination tree</h4>
+<pre>Bad coalescing?              NO — both 4 sectors/request
+More useful traffic?         NO — both 400 MB read + 400 MB write
+More aggregate LSU requests? NO — both 3.125M LD + 3.125M ST
+Register spilling?           NO — zero spills
+Occupancy collapse?          NO — achieved occupancy rises
+Theoretical occupancy loss?  NO — remains 100%
+Hierarchy heavily utilized?  YES — MLP4 DRAM 85.15%, L2 90.58%
+More live state?             YES — 20 → 30 registers/thread
+Less-uniform instance load?  HINT — verify at slice/partition level</pre>
+<h3>Command log</h3>
+<pre># Build / run Copy
+nvcc -O3 -arch=sm_90 -lineinfo stride_read.cu -o stride_read
+./stride_read
+
+# PTX and SASS
+nvcc -O3 -arch=sm_90 -lineinfo -ptx stride_read.cu -o stride_read.ptx
+nvcc -O3 -arch=sm_90 -lineinfo --cubin stride_read.cu -o stride_read.cubin
+nvdisasm -g -c stride_read.cubin &gt; nvdisasm.sass
+cuobjdump --dump-sass stride_read &gt; cuobjdump.sass
+
+# Initial NCU
+ncu --force-overwrite --kernel-name-base demangled --launch-skip 1 --launch-count 1 \
+  --section SpeedOfLight --section MemoryWorkloadAnalysis \
+  --section MemoryWorkloadAnalysis_Chart -o stride1_memory ./stride_read
+
+# Scheduler / occupancy
+ncu --force-overwrite --launch-skip 1 --launch-count 1 \
+  --section SchedulerStats --section WarpStateStats -o stride1_scheduler ./stride_read
+ncu --force-overwrite --launch-skip 1 --launch-count 1 \
+  --section Occupancy -o stride1_occupancy ./stride_read
+
+# Triad
+nvcc -O3 -arch=sm_90 -lineinfo triad.cu -o triad
+./triad
+ncu --force-overwrite --launch-skip 1 --launch-count 1 \
+  --section SpeedOfLight -o triad_sol ./triad
+
+# MLP build and sweep
+nvcc -O3 -arch=sm_90 -lineinfo mlp_copy.cu -o mlp_copy
+./mlp_copy 1
+./mlp_copy 2
+./mlp_copy 4
+./mlp_copy 8
+
+# MLP SASS
+nvcc -O3 -arch=sm_90 -lineinfo --cubin mlp_copy.cu -o mlp_copy.cubin
+nvdisasm -g -c mlp_copy.cubin &gt; mlp_copy.sass
+grep -n "mlp_copy" mlp_copy.sass
+grep -n -A80 '_Z8mlp_copyILi4EEvPKfPfm:' mlp_copy.sass
+sed -n '1,108p' mlp_copy.sass | grep -E 'LDG|STG'
+
+# Automated NCU sweep
+../../../scripts/profile_memory_kernel.sh ./mlp_copy mlp1 1
+../../../scripts/profile_memory_kernel.sh ./mlp_copy mlp2 2
+../../../scripts/profile_memory_kernel.sh ./mlp_copy mlp4 4
+../../../scripts/profile_memory_kernel.sh ./mlp_copy mlp8 8
+
+# Register / spill report
+nvcc -O3 -arch=sm_90 -lineinfo -Xptxas=-v mlp_copy.cu -o mlp_copy_ptxas \
+  2&gt;&amp;1 | tee ptxas_mlp.txt
+
+# Query available metrics
+ncu --query-metrics | grep -Ei \
+'inst_executed|pipe_lsu|mem_global|long_scoreboard|mio|issue' \
+&gt; mlp_pipeline_available.txt</pre>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
