@@ -464,6 +464,109 @@ Triad:  A[i] = B[i] + scalar * C[i]</pre>
 
 # Triad
 ./scripts/profile_memory_kernel.sh ./triad triad</pre>
+<h3>Why CPU STREAM can approach its sustainable bandwidth more easily: vectorization, unrolling, prefetching, and MLP</h3>
+<p>The Copy-versus-Triad result motivates a CPU/GPU comparison. A source-level CPU loop such as <code>A[i] = B[i]</code> does not imply that the processor waits for one element from DRAM before starting the next. Modern CPU execution can create memory concurrency through several mechanisms at once: SIMD vectorization, loop unrolling, out-of-order execution, hardware prefetching, load/store buffers, miss-status/queue resources, and multiple cores.</p>
+<h4>Scalar source code versus vectorized machine work</h4>
+<pre>Source-level scalar loop:
+
+for (i = 0; i &lt; N; ++i)
+    A[i] = B[i];
+
+Conceptual scalar interpretation:
+load B[0] → store A[0]
+load B[1] → store A[1]
+load B[2] → store A[2]
+...
+
+But an optimizing compiler may vectorize the loop:
+
+vector load  B[i : i+V-1]
+vector store A[i : i+V-1]
+
+where V is the number of elements represented by one SIMD vector.</pre>
+<p>Vectorization means one machine instruction operates on multiple data elements. For FP32, a 256-bit vector can represent 8 floats and a 512-bit vector can represent 16 floats. This is distinct from memory-level parallelism: SIMD widens the amount of data represented by an instruction, while MLP describes multiple memory operations outstanding concurrently. In practice, vectorization and unrolling can help expose more independent work to the out-of-order engine.</p>
+<h4>Unrolling exposes multiple iterations</h4>
+<pre>Original:
+for (...) {
+    A[i] = B[i];
+}
+
+Conceptually unrolled:
+load B[i+0]
+load B[i+1]
+load B[i+2]
+load B[i+3]
+
+store A[i+0]
+store A[i+1]
+store A[i+2]
+store A[i+3]</pre>
+<p>If the addresses are independent, the CPU does not need to complete the first demand load before issuing all later loads. The out-of-order engine can keep multiple loads in flight, subject to load buffers, miss-handling resources, queues and dependency rules.</p>
+<h4>Hardware prefetching adds another source of concurrency</h4>
+<p>A regular sequential stream is easy for CPU hardware prefetchers to recognize. Prefetchers can request future cache lines before demand instructions reach them, creating memory traffic ahead of the demand-load dependency chain. Thus a CPU STREAM kernel's effective memory concurrency is not determined only by the number of demand loads visible in one source iteration.</p>
+<pre>Demand execution:     line 0   line 1   line 2   line 3 ...
+                         |        |        |
+                         v        v        v
+Prefetch prediction:              line 4   line 5   line 6 ...
+                                      |
+                                      v
+                         cache/miss queues/MSHR-like resources
+                                      |
+                                      v
+                              many requests in flight
+                                      |
+                                      v
+                                     DRAM</pre>
+<h4>Contrast with the deliberately simple GPU Copy kernel</h4>
+<p>Our GPU Copy kernel gives each thread one element and then exits. Its key SASS dependency is <code>LDG → R7 → STG</code>. GPU latency hiding primarily relies on having other eligible warps plus any ILP/MLP available inside each warp. NCU showed many active warps but very few eligible warps, so residency alone did not hide the memory latency.</p>
+<table>
+<tr><th>Mechanism</th><th>CPU streaming loop</th><th>Current GPU Copy experiment</th></tr>
+<tr><td>SIMD/SIMT width</td><td>SIMD vector instructions process multiple elements</td><td>32 lanes execute a warp instruction</td></tr>
+<tr><td>Loop unrolling</td><td>Can expose several independent iterations to OoO</td><td>One element/thread; no per-thread loop to unroll</td></tr>
+<tr><td>Dynamic scheduling</td><td>Out-of-order engine finds independent instructions</td><td>Warp scheduler switches among ready warps</td></tr>
+<tr><td>Prefetching</td><td>Regular streams can generate future cache-line requests ahead of demand</td><td>Current experiment is analyzed from demand warp requests; do not assume CPU-style stream-prefetch behavior</td></tr>
+<tr><td>Latency hiding</td><td>OoO + buffers + prefetch + MLP + cores</td><td>warp-level parallelism + per-warp ILP/MLP</td></tr>
+</table>
+<h4>What Triad taught us</h4>
+<p>Triad increased useful bandwidth from about 2.65 TB/s to 3.45 TB/s and DRAM utilization from 55.16% to 71.97%, while L2 throughput rose from 65.60% to 82.73%. Yet scheduler readiness did not improve: eligible warps stayed near 0.37–0.38 and no-eligible cycles remained roughly 73–75%. Long-scoreboard waiting increased rather than decreased. Therefore more independent loads increased aggregate outstanding memory work and memory-system utilization without making an individual warp's dependent consumer become ready sooner.</p>
+<pre>Copy:
+LDG B ───────────────► STG
+        wait
+
+Triad:
+LDG B ─────┐
+           ├────► arithmetic ─► STG
+LDG C ─────┘
+       both values eventually required
+
+More independent requests can raise memory-system utilization
+even while the consumer warp remains latency-bound.</pre>
+<h4>Next controlled bridge between CPU-style unrolling and GPU per-thread ILP</h4>
+<p>A useful next kernel will give each GPU thread multiple independent elements rather than immediately exiting after one element. For example, four independent loads can be issued before their values are consumed. This is not identical to CPU vectorization or OoO execution, but it gives a controlled way to study the same underlying performance question: how much independent outstanding memory work is needed to cover latency and drive the hierarchy toward its throughput limits?</p>
+<pre>GPU MLP4 concept:
+
+x0 = in[address0]
+x1 = in[address1]
+x2 = in[address2]
+x3 = in[address3]
+
+        four independent LDGs
+                 |
+                 v
+       more outstanding work
+                 |
+                 v
+       L2 / HBM utilization?
+
+Measure simultaneously:
+- DRAM throughput
+- L2 throughput
+- eligible warps
+- no-eligible cycles
+- long-scoreboard stalls
+- achieved occupancy
+- register usage</pre>
+<p>Because Triad already reaches 82.73% L2 throughput, an MLP4/MLP8 experiment may reveal a new bottleneck before HBM reaches 100%. The experiment should determine that transition rather than assuming HBM remains the next limiting resource.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
