@@ -6,13 +6,61 @@ body{font-family:system-ui,-apple-system,sans-serif;max-width:1100px;margin:40px
 h1,h2,h3{line-height:1.2} code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace} pre{background:#f6f8fa;padding:16px;overflow:auto;border-radius:8px}
 table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #d0d7de;padding:8px;text-align:right}th:first-child,td:first-child{text-align:left}
 .note{border-left:4px solid #888;padding:8px 16px;background:#f6f8fa}.pending{font-style:italic}
-</style></head><body>
+
+:root{scroll-behavior:smooth}
+body{max-width:1280px}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:32px}
+.toc{position:sticky;top:20px;align-self:start;max-height:calc(100vh - 40px);overflow:auto;border:1px solid #d0d7de;border-radius:10px;padding:16px;background:#fff}
+.toc h2{font-size:1rem;margin-top:0}.toc ol{padding-left:1.1rem}.toc li{margin:6px 0}.toc a{text-decoration:none;color:#0969da}.toc a:hover{text-decoration:underline}
+.content{min-width:0}.section-kicker{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:#57606a;font-weight:700}
+.backtop{font-size:.85rem}.chapter{margin-top:42px;padding-top:8px;border-top:2px solid #d8dee4}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:relative;top:auto;max-height:none}}
+</style></head><body id="top">
 <h1>GPU Performance & Architecture Study</h1>
 <p>Living report for GPU microarchitecture experiments, hardware profiling, ISA analysis, trace-driven simulation, LLM prefill/decode, and graphics. Initial hardware target: NVIDIA H200; comparative target: AMD MI355X.</p>
-<h2>Part I — GPU Architecture Foundations</h2>
-<h3>1. Thread → Block → Warp → Lane</h3>
+<div class="layout">
+<nav class="toc" aria-label="Table of contents">
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#foundations">Foundations</a>
+  <ol>
+    <li><a href="#thread-model">Thread → Block → Warp → Lane</a></li>
+    <li><a href="#coalescing">Global memory & coalescing</a></li>
+    <li><a href="#alignment">Alignment</a></li>
+  </ol>
+</li>
+<li><a href="#stride-baseline">Stride-1 Baseline Experiment</a>
+  <ol>
+    <li><a href="#source-build">Source & build</a></li>
+    <li><a href="#ptx-sass">PTX/SASS walkthrough</a></li>
+    <li><a href="#multiword">64-bit multiword comparison</a></li>
+    <li><a href="#metric-discovery">NCU metric discovery</a></li>
+    <li><a href="#stride-correlation">Prediction vs H200</a></li>
+    <li><a href="#l2-decomp">L2 decomposition</a></li>
+    <li><a href="#scheduler-occupancy">Scheduler & occupancy</a></li>
+  </ol>
+</li>
+<li><a href="#triad">Copy vs Triad</a></li>
+<li><a href="#mlp">Controlled MLP Sweep</a>
+  <ol>
+    <li><a href="#mlp-sass">SASS validation</a></li>
+    <li><a href="#mlp-correlation">MLP1–MLP8 correlation</a></li>
+    <li><a href="#mlp-lsu">MLP4 vs MLP8 LSU control</a></li>
+    <li><a href="#mlp-final">Final MLP conclusion</a></li>
+  </ol>
+</li>
+<li><a href="#cpu-gpu">CPU vs GPU Latency Hiding</a></li>
+<li><a href="#async-movement">GPU Prefetching, cp.async & TMA</a></li>
+<li><a href="#memory-hierarchy">GPU Memory Hierarchy</a></li>
+<li><a href="#commands">Command Log</a></li>
+<li><a href="#roadmap">Roadmap</a></li>
+</ol>
+</nav>
+<main class="content">
+<h2 id="foundations" class="chapter">1. Foundations</h2>
+<h3 id="thread-model">1.1 Thread → Block → Warp → Lane</h3>
 <p>A CUDA kernel is launched as a grid of blocks. Threads have a block-local <code>threadIdx</code>; a common 1-D global index is <code>blockIdx.x * blockDim.x + threadIdx.x</code>. NVIDIA groups 32 threads into a warp. The lane is the thread's position inside that warp.</p>
-<h3>2. Global Memory Access & Coalescing</h3>
+<h3 id="coalescing">1.2 Global Memory Access & Coalescing</h3>
 <p>For FP32, one lane requests 4 B. A full 32-lane warp performing a contiguous load therefore requests 128 useful bytes.</p>
 <pre>32 lanes × 4 B = 128 useful B</pre>
 <p>For our Hopper experiment, we begin with a 32-B sector mental model. Eight adjacent FP32 lane accesses fit in one sector.</p>
@@ -24,12 +72,12 @@ table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #
 <tr><td>16</td><td>64 B</td><td>≤1</td><td>32</td><td>1024 B</td><td>12.5%</td></tr>
 <tr><td>32</td><td>128 B</td><td>≤1</td><td>32</td><td>1024 B</td><td>12.5%</td></tr></table>
 <div class="note"><strong>Important:</strong> useful bytes, sector bytes, cache traffic and actual HBM traffic are distinct quantities. The experiment will test how the simple prediction maps onto real H200 behavior.</div>
-<h3>3. Alignment</h3>
+<h3 id="alignment">1.3 Alignment</h3>
 <p>An aligned contiguous 128-B warp load can occupy four 32-B sectors. Shifting the same access by 4 B can make it touch five sectors, giving 128/(5×32) = 80% simple useful-byte efficiency.</p>
-<h2>Experiment 1 — SM-driven stride read</h2>
+<h2 id="stride-baseline" class="chapter">2. Experiment 1 — Stride-1 Global Memory Baseline</h2>
 <p><code>out[i] = in[i * stride]</code></p>
 <p>Initial configuration: FP32, 100,000,000 outputs, stride 1, 256 threads/block. Each output represents 4 B of useful input read plus 4 B of useful output write, or 0.8 GB application-level useful traffic for the full run.</p>
-<h3>Full CUDA source</h3>
+<h3 id="source-build">2.1 Full CUDA Source</h3>
 <pre>#include &lt;cuda_runtime.h&gt;
 
 #include &lt;cstdio&gt;
@@ -128,10 +176,10 @@ int main()
     return 0;
 }
 </pre>
-<h3>Build and run</h3>
+<h3>2.2 Build and Run</h3>
 <pre>nvcc -O3 -arch=sm_90 -lineinfo stride_read.cu -o stride_read
 ./stride_read</pre>
-<h3>First H200 measurement</h3>
+<h3>2.3 First H200 Measurement</h3>
 <pre>N               : 100000000
 stride          : 1
 input size      : 400.00 MB
@@ -144,16 +192,16 @@ Useful traffic  : 0.800 GB
 Useful bandwidth: 2646.90 GB/s</pre>
 <p>The application-level arithmetic is 100,000,000 elements × (4 B read + 4 B write) = 0.8 GB useful traffic. Dividing by 0.302 ms gives approximately 2.65 TB/s useful bandwidth. This is not yet asserted to be identical to actual HBM traffic; profiler counters will establish L1/L2/DRAM movement.</p>
 <p>The launch is exact: 390625 blocks × 256 threads = 100,000,000 threads, or 3,125,000 full warps, with no partial final block.</p>
-<h3>PTX observations</h3>
+<h3 id="ptx-sass">2.4 PTX Observations</h3>
 <p>The PTX preserves <code>stride</code> as a runtime kernel parameter. The input address is formed from <code>i × stride × sizeof(float)</code>; the output remains contiguous. The actual data operation is a <code>ld.global.nc.f32</code> followed by <code>st.global.f32</code>. PTX is a virtual ISA, so the final Hopper machine instructions must be checked in SASS.</p>
-<h3>SASS / nvdisasm workflow</h3>
+<h3>2.5 SASS / nvdisasm Workflow</h3>
 <pre>nvcc -O3 -arch=sm_90 -lineinfo --cubin stride_read.cu -o stride_read.cubin
 nvdisasm stride_read.cubin &gt; stride_read.sass
 
 # Alternative extraction from the executable
 cuobjdump --dump-sass stride_read &gt; cuobjdump.sass</pre>
 <p>On the captured Hopper SASS, the key machine instructions include <code>S2R</code>/<code>S2UR</code> for thread/block IDs, <code>IMAD</code>/<code>LEA</code> for index/address generation, <code>LDG.E.CONSTANT</code> for the input load, and <code>STG.E</code> for the output store. The kernel metadata reports a register count of 10.</p>
-<h3>Detailed Hopper SASS walkthrough</h3>
+<h3>2.6 Detailed Hopper SASS Walkthrough</h3>
 <p>The native <code>sm_90</code> kernel is small enough to follow from CUDA source to machine instructions. The walkthrough below focuses on architectural meaning rather than manually decoding the 128-bit instruction encodings.</p>
 <pre>/*0010*/ S2R  R2, SR_TID.X;
 /*0020*/ S2UR UR4, SR_CTAID.X;
@@ -194,7 +242,7 @@ warp lane addresses
 coalescing / sectors
     ↓
 L1/TEX → L2 → HBM</pre>
-<h3>Multiword arithmetic and the 64-bit bounds comparison</h3>
+<h3 id="multiword">2.7 Multiword Arithmetic and the 64-bit Bounds Comparison</h3>
 <p>The source uses <code>size_t</code>, so both the global index <code>i</code> and <code>n</code> are 64-bit values. The Hopper SASS performs the bounds check using two 32-bit pieces:</p>
 <pre>i = [ R3  | R2  ]
       high   low
@@ -237,10 +285,10 @@ result = [high | low]</pre>
 <p>The extended comparison is conceptually similar: information from one word participates in the operation on the next word, avoiding branch-heavy source-like logic.</p>
 <h4>Why the high half of <code>i</code> is zero in this run</h4>
 <p>The experiment launches only 100,000,000 threads, well below 2<sup>32</sup>. Thus the high 32 bits of the current global index are zero. The SASS initializes that high piece with <code>IMAD.MOV.U32 R3, RZ, RZ, RZ</code>. Nevertheless, because the kernel interface uses 64-bit <code>size_t</code>, the generated code remains correct for larger 64-bit index values rather than specializing itself to this particular launch size.</p>
-<h3>Fatbin: native code and PTX</h3>
+<h3>2.8 Fatbin: Native Code and PTX</h3>
 <p>The executable fatbin contains native <code>sm_90</code> ELF code as well as an embedded PTX image. The native section is what <code>cuobjdump --dump-sass</code>/<code>nvdisasm</code> expose as Hopper SASS; the PTX section remains a virtual-ISA representation. Keeping these layers separate is important when reasoning about what the hardware actually executes versus what the compiler frontend emitted.</p>
 <p><code>cuobjdump</code> also prints the two 64-bit words encoding each Hopper instruction. For this study we retain those encodings as evidence but analyze the human-readable SASS rather than attempting to decode the bitfields manually.</p>
-<h3>Nsight Compute metric discovery on this H200</h3>
+<h3 id="metric-discovery">2.9 Nsight Compute Metric Discovery</h3>
 <p>Before selecting counters, the available metrics were queried from the installed Nsight Compute rather than assuming metric names from another CUDA release:</p>
 <pre>ncu --query-metrics | grep -Ei \
 'sector|dram.*bytes|lts.*sector|l1tex.*sector' \
@@ -303,7 +351,7 @@ Output store:
 <tr><td>Source-level useful store bytes</td><td>400 MB</td></tr>
 </table>
 <p>For the later stride-2 experiment, the input prediction changes to 8 sectors/request, 25,000,000 load sectors and 16 useful B/sector, while the contiguous output-store predictions remain unchanged.</p>
-<h3>Stride-1 targeted NCU correlation</h3>
+<h3 id="stride-correlation">2.10 Stride-1 Targeted NCU Correlation</h3>
 <p>The targeted counter run validates the hand-derived coalescing model exactly at the L1/TEX request level.</p>
 <table>
 <tr><th>Quantity</th><th>Prediction</th><th>H200 measurement</th></tr>
@@ -342,7 +390,7 @@ L2 Cache Throughput         65.60%
 L1/TEX Cache Throughput     18.82%
 Compute (SM) Throughput     26.45%</pre>
 <p>The profiler's achieved 2.65 TB/s agrees closely with the standalone 2.647 TB/s useful-bandwidth calculation, while DRAM reaches only 55.16% of its reported peak-throughput reference. This does not mean that only 55% of source bytes reached DRAM; it is a utilization/throughput ratio. The next experiment phase investigates why the streaming kernel does not approach the device's peak bandwidth and whether the limiting factor is request generation, latency/MLP, memory-partition behavior, instruction/scheduler throughput, or another pipeline constraint.</p>
-<h3>Why only ~55% DRAM throughput? Scheduler, scoreboard, and occupancy analysis</h3>
+<h3 id="scheduler-occupancy">2.12 Why Only ~55% DRAM? Scheduler, Scoreboard, and Occupancy</h3>
 <p>After validating coalescing, the next question was why a perfectly coalesced streaming copy reached only 55.16% of the profiler's DRAM peak reference. Scheduler and warp-state data show that the kernel is primarily unable to keep enough warps instruction-ready while waiting on memory.</p>
 <h4>Scheduler statistics</h4>
 <table>
@@ -422,7 +470,7 @@ scoreboard pressure ↓
 DRAM utilization ↑
 
 until another resource becomes limiting</pre>
-<h3>L2 decomposition after the stride-1 request-level correlation</h3>
+<h3 id="l2-decomp">2.11 L2 Decomposition</h3>
 <table>
 <tr><th>Metric</th><th>Measured sectors</th></tr>
 <tr><td>DRAM read</td><td>12,500,480</td></tr>
@@ -438,7 +486,7 @@ until another resource becomes limiting</pre>
 </table>
 <p>The source-attributed L1TEX traffic again matches the hand model exactly: 12.5 M read sectors and 12.5 M write sectors. Therefore the larger ~18.77 M L2 read/write operation counts are not evidence that the coalescer generated extra source requests. They represent additional activity observed at the L2 operation level and require cache-internal decomposition before assigning a precise cause.</p>
 <p>The DRAM read count is also nearly exact: 12,500,480 sectors × 32 B ≈ 400.015 MB, matching the 400 MB useful input stream. The L2 data show that reads are overwhelmingly misses while writes are overwhelmingly lookup hits. The approximately 6.25 M-operation gap between source-attributed sectors and total L2 operations is retained as an investigation item; store allocation/fill/eviction or other internal L2 behavior is a hypothesis to test, not yet a conclusion.</p>
-<h3>Copy versus Triad: a natural MLP experiment</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="triad" class="chapter">3. Copy versus Triad</h2>
 <p>Before building an artificial 1/2/4/8-load kernel, we compare the copy-like stride-1 kernel with a standard Triad-shaped kernel:</p>
 <pre>Copy:   A[i] = B[i]
 
@@ -464,7 +512,7 @@ Triad:  A[i] = B[i] + scalar * C[i]</pre>
 
 # Triad
 ./scripts/profile_memory_kernel.sh ./triad triad</pre>
-<h3>Why CPU STREAM can approach its sustainable bandwidth more easily: vectorization, unrolling, prefetching, and MLP</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="cpu-gpu" class="chapter">5. CPU versus GPU Latency Hiding</h2>
 <p>The Copy-versus-Triad result motivates a CPU/GPU comparison. A source-level CPU loop such as <code>A[i] = B[i]</code> does not imply that the processor waits for one element from DRAM before starting the next. Modern CPU execution can create memory concurrency through several mechanisms at once: SIMD vectorization, loop unrolling, out-of-order execution, hardware prefetching, load/store buffers, miss-status/queue resources, and multiple cores.</p>
 <h4>Scalar source code versus vectorized machine work</h4>
 <pre>Source-level scalar loop:
@@ -567,7 +615,7 @@ Measure simultaneously:
 - achieved occupancy
 - register usage</pre>
 <p>Because Triad already reaches 82.73% L2 throughput, an MLP4/MLP8 experiment may reveal a new bottleneck before HBM reaches 100%. The experiment should determine that transition rather than assuming HBM remains the next limiting resource.</p>
-<h3>Controlled per-warp MLP sweep: MLP1 → MLP8</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="mlp" class="chapter">4. Controlled Per-Warp MLP Sweep</h2>
 <p>To separate total work from independent memory-level parallelism, the MLP benchmark keeps total active elements and useful traffic approximately constant while varying the number of disjoint contiguous streams handled by each thread. Each stream remains coalesced across warp lanes.</p>
 <table>
 <tr><th>Independent loads/thread</th><th>Elements/stream</th><th>Kernel time</th><th>Useful traffic</th><th>Useful bandwidth</th></tr>
@@ -577,7 +625,7 @@ Measure simultaneously:
 <tr><td>8</td><td>12,500,000</td><td>0.207 ms</td><td>0.800 GB</td><td>3.865 TB/s</td></tr>
 </table>
 <p>MLP1 reproduces the original Copy result closely. Increasing independent loads raises useful bandwidth strongly through MLP4: MLP4 is about 1.50× MLP1 at the application-useful-byte level. MLP8 then regresses slightly. This identifies an experimental knee rather than a monotonic “more MLP is always better” relationship.</p>
-<h4>SASS validation: the compiler preserved the intended independence</h4>
+<h3 id="mlp-sass">4.1 SASS Validation</h3>
 <p>Before interpreting the timing sweep, native Hopper SASS was checked to ensure the compiler emitted multiple loads before their dependent stores.</p>
 <pre>MLP4, simplified:
 
@@ -612,10 +660,10 @@ LDG → R25
   +-- cache/request-pipeline pressure ↑  (potential cost)
 
 Observed knee: MLP4 ≈ 4.01 TB/s; MLP8 ≈ 3.87 TB/s</pre>
-<h3>Triad measured result and revised MLP interpretation</h3>
+<h3>3.1 Triad Results and Revised Interpretation</h3>
 <p>Triad achieved 3.446 TB/s useful bandwidth. Targeted NCU measured 800.03 MB DRAM reads, 25,000,000 global-load sectors, 12,500,000 global-store sectors, and four sectors/request for both load and store instructions. Scheduler behavior did not improve: active warps/scheduler rose slightly to 11.65, but eligible warps remained 0.37, no-eligible cycles increased to 75.37%, and long-scoreboard waiting rose to 41.0 cycles (86.8% of the issue interval). Achieved occupancy was 74.25%.</p>
 <p>Speed-of-Light profiling showed DRAM throughput increasing from Copy's 55.16% to Triad's 71.97%, while L2 throughput increased from 65.60% to 82.73%. Thus Triad drove the memory hierarchy harder without making individual consumer warps less latency-bound. This refines the earlier hypothesis: more independent loads can increase aggregate memory-system utilization even when warp-level scoreboard waiting remains severe.</p>
-<h3>MLP1–MLP8 NCU correlation: locating the performance knee</h3>
+<h3 id="mlp-correlation">4.2 MLP1–MLP8 NCU Correlation</h3>
 <p>The complete profiler sweep confirms that increasing per-warp independent loads raises memory-system utilization through MLP4, after which performance regresses slightly even though achieved occupancy continues to rise.</p>
 <table>
 <tr><th>Metric</th><th>MLP1</th><th>MLP2</th><th>MLP4</th><th>MLP8</th></tr>
@@ -660,7 +708,7 @@ but useful BW falls to 3.87 TB/s.</pre>
 <p>Register usage rises from 8 to 30 registers/thread as more load results and addresses remain live. However, there are zero spills in all variants. At MLP8 the register block limit reaches 8, equal to the warp-derived block limit of 8; theoretical occupancy therefore remains 100%. Achieved occupancy actually rises from MLP4 to MLP8. Consequently the MLP8 regression cannot be explained by register spilling or an occupancy collapse.</p>
 <h4>Current conclusion and remaining hypothesis</h4>
 <p>MLP4 is the observed sweet spot for this benchmark. By MLP4, DRAM is at 85.15% and L2 at 90.58% of the profiler's throughput references. MLP8 adds live state, address-generation/instruction work and request pressure while memory throughput no longer improves. The next collection focuses on load/store instruction pipelines, memory-pipe activity and instruction mix to distinguish a request/LSU pipeline limit from hierarchy saturation or additional instruction overhead. L2 is highly utilized, but 90.58% alone is not sufficient evidence to declare L2 the definitive bottleneck.</p>
-<h3>MLP4 versus MLP8: identical aggregate LSU work</h3>
+<h3 id="mlp-lsu">4.3 MLP4 versus MLP8 — Identical Aggregate LSU Work</h3>
 <p>The final targeted L1TEX/LSU collection shows that MLP4 and MLP8 both generate 3,125,000 global-load requests, 3,125,000 global-store requests, 3,125,000 load/store output wavefronts, and exactly 400 MB of requested load and store bytes. Thus MLP8 is not slower because it performs more aggregate source memory work.</p>
 <table><tr><th>Metric</th><th>MLP4</th><th>MLP8</th></tr>
 <tr><td>Global load requests</td><td>3,125,000</td><td>3,125,000</td></tr>
@@ -682,7 +730,7 @@ Theoretical occupancy loss?  NO — remains 100%
 Hierarchy heavily utilized?  YES — MLP4 DRAM 85.15%, L2 90.58%
 More live state?             YES — 20 → 30 registers/thread
 Less-uniform instance load?  HINT — verify at slice/partition level</pre>
-<h3>Command log</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="commands" class="chapter">8. Reproducible Command Log</h2>
 <pre># Build / run Copy
 nvcc -O3 -arch=sm_90 -lineinfo stride_read.cu -o stride_read
 ./stride_read
@@ -738,7 +786,7 @@ nvcc -O3 -arch=sm_90 -lineinfo -Xptxas=-v mlp_copy.cu -o mlp_copy_ptxas \
 ncu --query-metrics | grep -Ei \
 'inst_executed|pipe_lsu|mem_global|long_scoreboard|mio|issue' \
 &gt; mlp_pipeline_available.txt</pre>
-<h3>Final MLP conclusion: upstream grouping versus downstream balance</h3>
+<h3 id="mlp-final">4.4 Final MLP Conclusion</h3>
 <p>The final MLP4/MLP8 comparison examined the min/max reductions across the hardware instances underlying the selected L1TEX, L2 and DRAM metrics. MLP8 shows a much wider upstream L1TEX request distribution, but that widening is largely absent at L2 and DRAM.</p>
 <table>
 <tr><th>Metric</th><th>MLP4 min → max</th><th>MLP8 min → max</th></tr>
@@ -776,7 +824,7 @@ Observed MLP4 operating point:
 <p><strong>Conclusion:</strong> MLP4 is the observed operating knee for this kernel/configuration. Increasing independent loads from one to four substantially improves how effectively the kernel feeds the H200 memory hierarchy. Increasing from four to eight does not add aggregate source memory work or aggregate LSU requests and does not increase downstream throughput. Instead it increases per-warp state/dependency duration and scheduler starvation while the hierarchy is already highly utilized. This is deliberately stated as an empirical architectural conclusion rather than assigning the knee to an undocumented internal queue.</p>
 <h4>Methodological lesson</h4>
 <p>The MLP chapter demonstrates a reusable performance-engineering method: hold useful work constant; vary one architectural property; validate the generated SASS; measure request-level, hierarchy, scheduler and occupancy behavior; form hypotheses; and eliminate explanations with targeted counters. The next stride chapter changes a different variable: transaction efficiency rather than request concurrency.</p>
-<h3>GPU prefetching, cp.async, TMA, and software pipelining</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="async-movement" class="chapter">6. GPU Prefetching, cp.async, TMA, and Software Pipelining</h2>
 <p>The CPU/GPU comparison raises a natural question: does the GPU have a prefetcher? For this study, avoid assuming a CPU-style hardware stream prefetcher that automatically recognizes a sequential <code>A[i]</code> stream and runs far ahead of demand warps. GPU cache/fill behavior and fetch granularity are separate concepts. Modern NVIDIA GPUs also provide explicit asynchronous data-movement mechanisms that software can use to pipeline future data with current computation.</p>
 <h4>CPU hardware prefetching versus GPU explicit data movement</h4>
 <pre>CPU-style stream prefetching:
@@ -885,7 +933,7 @@ Compute current Tile N ====================
 Goal:
 hide data-movement latency behind useful compute</pre>
 <p>The concepts are complementary. <strong>MLP</strong> asks how many independent memory operations can be outstanding. <strong>Software pipelining</strong> asks whether future data movement can overlap current useful computation. <strong>TMA</strong> provides Hopper-specific hardware support for efficient bulk multidimensional tensor movement. These ideas will be revisited after the basic stride/cache experiments in a progression from naïve tiled GEMM to asynchronous staging and then Hopper-oriented TMA pipelines.</p>
-<h3>GPU memory hierarchy: working mental model</h3>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="memory-hierarchy" class="chapter">7. GPU Memory Hierarchy — Working Mental Model</h2>
 <p>Before moving into GEMM, the study uses the following Hopper/H200-oriented conceptual hierarchy. Registers, shared memory and L1/TEX are SM-local resources; L2 is GPU-wide; HBM is the large off-chip global-memory backing store.</p>
 <pre>                         GPU
                           |
@@ -1012,6 +1060,6 @@ TMA -> shared-memory tiles -> register/tensor-core operand path -> Tensor Cores<
 <p>The planned progression is therefore: naïve FP32 GEMM → shared-memory tiled GEMM → double-buffered/asynchronous staging → cp.async-style pipeline → Hopper TMA → Tensor Core version. At every stage the study will preserve the same methodology used for the MLP chapter: hand model → code → PTX/SASS → targeted NCU → architectural explanation.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
-<h2>Roadmap</h2>
+<p class="backtop"><a href="#top">↑ Back to top</a></p><h2 id="roadmap" class="chapter">9. Roadmap</h2>
 <p>Memory bandwidth/coalescing → latency/pointer chase → MLP → cache/working-set → compute dependency/ILP → H200 vs MI355X → trace-driven simulation → LLM prefill/decode → graphics.</p>
-</body></html>
+</main></div></body></html>
