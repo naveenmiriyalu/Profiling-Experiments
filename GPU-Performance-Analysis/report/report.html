@@ -615,6 +615,51 @@ Observed knee: MLP4 ≈ 4.01 TB/s; MLP8 ≈ 3.87 TB/s</pre>
 <h3>Triad measured result and revised MLP interpretation</h3>
 <p>Triad achieved 3.446 TB/s useful bandwidth. Targeted NCU measured 800.03 MB DRAM reads, 25,000,000 global-load sectors, 12,500,000 global-store sectors, and four sectors/request for both load and store instructions. Scheduler behavior did not improve: active warps/scheduler rose slightly to 11.65, but eligible warps remained 0.37, no-eligible cycles increased to 75.37%, and long-scoreboard waiting rose to 41.0 cycles (86.8% of the issue interval). Achieved occupancy was 74.25%.</p>
 <p>Speed-of-Light profiling showed DRAM throughput increasing from Copy's 55.16% to Triad's 71.97%, while L2 throughput increased from 65.60% to 82.73%. Thus Triad drove the memory hierarchy harder without making individual consumer warps less latency-bound. This refines the earlier hypothesis: more independent loads can increase aggregate memory-system utilization even when warp-level scoreboard waiting remains severe.</p>
+<h3>MLP1–MLP8 NCU correlation: locating the performance knee</h3>
+<p>The complete profiler sweep confirms that increasing per-warp independent loads raises memory-system utilization through MLP4, after which performance regresses slightly even though achieved occupancy continues to rise.</p>
+<table>
+<tr><th>Metric</th><th>MLP1</th><th>MLP2</th><th>MLP4</th><th>MLP8</th></tr>
+<tr><td>Standalone useful BW</td><td>2.674 TB/s</td><td>3.671 TB/s</td><td><strong>4.010 TB/s</strong></td><td>3.865 TB/s</td></tr>
+<tr><td>DRAM throughput</td><td>55.94%</td><td>76.66%</td><td><strong>85.15%</strong></td><td>82.80%</td></tr>
+<tr><td>L2 throughput</td><td>66.80%</td><td>86.64%</td><td><strong>90.58%</strong></td><td>88.61%</td></tr>
+<tr><td>L1/TEX throughput</td><td>18.99%</td><td>27.14%</td><td>30.22%</td><td>30.62%</td></tr>
+<tr><td>Active warps/scheduler</td><td>11.11</td><td>11.85</td><td>12.92</td><td>13.62</td></tr>
+<tr><td>Eligible warps/scheduler</td><td>0.30</td><td>0.32</td><td>0.25</td><td>0.32</td></tr>
+<tr><td>No eligible</td><td>77.12%</td><td>78.35%</td><td>83.22%</td><td>87.13%</td></tr>
+<tr><td>Warp cycles / issued instruction</td><td>48.57</td><td>54.76</td><td>76.99</td><td>105.86</td></tr>
+<tr><td>Long-scoreboard wait</td><td>40.9 cycles</td><td>48.5</td><td>71.6</td><td>76.1</td></tr>
+<tr><td>Achieved occupancy</td><td>70.83%</td><td>75.42%</td><td>81.37%</td><td>85.08%</td></tr>
+<tr><td>Active warps/SM</td><td>45.33</td><td>48.27</td><td>52.08</td><td>54.45</td></tr>
+</table>
+<p>The memory traffic control remains clean: every variant reports four sectors/request, 12.5 M global-load sectors, 12.5 M global-store sectors, and approximately 400 MB of DRAM reads. Thus the performance curve is not caused by changing source-level useful traffic or degrading coalescing.</p>
+<h4>Interpretation</h4>
+<pre>MLP1 → MLP2 → MLP4
+independent requests/warp ↑
+        |
+        v
+memory system fed more effectively
+        |
+        +-- DRAM: 55.9% → 76.7% → 85.2%
+        +-- L2:   66.8% → 86.6% → 90.6%
+        |
+        v
+useful BW: 2.67 → 3.67 → 4.01 TB/s
+
+MLP8:
+more independent work still exists,
+but useful BW falls to 3.87 TB/s.</pre>
+<p>The scheduler data provide an important nuance: increasing MLP does not make individual warps become ready sooner. No-eligible cycles and long-scoreboard waiting generally increase. The benefit is that a warp can inject several independent requests before reaching the dependent-store phase, increasing aggregate outstanding memory work even though the warp later waits.</p>
+<h4>Static register cost from ptxas</h4>
+<table>
+<tr><th>Variant</th><th>Registers/thread</th><th>Spill stores</th><th>Spill loads</th><th>Register block limit</th></tr>
+<tr><td>MLP1</td><td>8</td><td>0</td><td>0</td><td>16</td></tr>
+<tr><td>MLP2</td><td>12</td><td>0</td><td>0</td><td>16</td></tr>
+<tr><td>MLP4</td><td>20</td><td>0</td><td>0</td><td>10</td></tr>
+<tr><td>MLP8</td><td>30</td><td>0</td><td>0</td><td>8</td></tr>
+</table>
+<p>Register usage rises from 8 to 30 registers/thread as more load results and addresses remain live. However, there are zero spills in all variants. At MLP8 the register block limit reaches 8, equal to the warp-derived block limit of 8; theoretical occupancy therefore remains 100%. Achieved occupancy actually rises from MLP4 to MLP8. Consequently the MLP8 regression cannot be explained by register spilling or an occupancy collapse.</p>
+<h4>Current conclusion and remaining hypothesis</h4>
+<p>MLP4 is the observed sweet spot for this benchmark. By MLP4, DRAM is at 85.15% and L2 at 90.58% of the profiler's throughput references. MLP8 adds live state, address-generation/instruction work and request pressure while memory throughput no longer improves. The next collection focuses on load/store instruction pipelines, memory-pipe activity and instruction mix to distinguish a request/LSU pipeline limit from hierarchy saturation or additional instruction overhead. L2 is highly utilized, but 90.58% alone is not sufficient evidence to declare L2 the definitive bottleneck.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
