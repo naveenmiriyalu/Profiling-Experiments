@@ -303,6 +303,45 @@ Output store:
 <tr><td>Source-level useful store bytes</td><td>400 MB</td></tr>
 </table>
 <p>For the later stride-2 experiment, the input prediction changes to 8 sectors/request, 25,000,000 load sectors and 16 useful B/sector, while the contiguous output-store predictions remain unchanged.</p>
+<h3>Stride-1 targeted NCU correlation</h3>
+<p>The targeted counter run validates the hand-derived coalescing model exactly at the L1/TEX request level.</p>
+<table>
+<tr><th>Quantity</th><th>Prediction</th><th>H200 measurement</th></tr>
+<tr><td>Warps</td><td>3,125,000</td><td>implied by exact launch</td></tr>
+<tr><td>Load sectors/request</td><td>4</td><td>4</td></tr>
+<tr><td>Store sectors/request</td><td>4</td><td>4</td></tr>
+<tr><td>Global load sectors</td><td>12,500,000</td><td>12,500,000</td></tr>
+<tr><td>Global store sectors</td><td>12,500,000</td><td>12,500,000</td></tr>
+<tr><td>L1 global-load hit rate</td><td>low for one-pass stream</td><td>0%</td></tr>
+<tr><td>Source useful read bytes</td><td>400 MB</td><td>DRAM read 400.06 MB</td></tr>
+<tr><td>Source useful write bytes</td><td>400 MB</td><td>DRAM write 380.68 MB</td></tr>
+</table>
+<pre>32 FP32 lanes × 4 B = 128 useful B/warp
+128 B / 32-B sector = 4 sectors/warp
+
+100,000,000 threads / 32 = 3,125,000 warps
+3,125,000 × 4 = 12,500,000 sectors
+
+NCU load sectors  = 12,500,000
+NCU store sectors = 12,500,000</pre>
+<p>This is the first complete analytical → source/PTX/SASS → hardware-counter correlation in the study. At the request/coalescing level, the simple sector model matches the hardware exactly.</p>
+<h4>Observed hierarchy traffic and open questions</h4>
+<table>
+<tr><th>Observation point</th><th>Read</th><th>Write</th></tr>
+<tr><td>Source useful bytes</td><td>400 MB</td><td>400 MB</td></tr>
+<tr><td>L1/TEX request sectors</td><td>12.500 M</td><td>12.500 M</td></tr>
+<tr><td>L2 operation sectors</td><td>18.800305 M</td><td>18.758026 M</td></tr>
+<tr><td>DRAM bytes</td><td>400.06 MB</td><td>380.68 MB</td></tr>
+</table>
+<p>The L2 operation-sector counts are not interchangeable with the L1 global-load/store request-sector counters. The approximately 18.8 M L2 read/write operations therefore require decomposition by source, operation, lookup hit/miss, fills and write/eviction behavior before assigning a cause. Likewise, the 380.68 MB DRAM-write value should be treated as a measured observation rather than forced to equal the 400 MB source-level store volume.</p>
+<h4>Speed-of-light result</h4>
+<pre>Duration               294.27 us
+Memory Throughput        2.65 TB/s
+DRAM Throughput            55.16%
+L2 Cache Throughput         65.60%
+L1/TEX Cache Throughput     18.82%
+Compute (SM) Throughput     26.45%</pre>
+<p>The profiler's achieved 2.65 TB/s agrees closely with the standalone 2.647 TB/s useful-bandwidth calculation, while DRAM reaches only 55.16% of its reported peak-throughput reference. This does not mean that only 55% of source bytes reached DRAM; it is a utilization/throughput ratio. The next experiment phase investigates why the streaming kernel does not approach the device's peak bandwidth and whether the limiting factor is request generation, latency/MLP, memory-partition behavior, instruction/scheduler throughput, or another pipeline constraint.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
