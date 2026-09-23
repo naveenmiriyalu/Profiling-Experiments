@@ -1,0 +1,136 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>GPU GEMM Performance Study</title>
+<style>body{font-family:Arial,sans-serif;max-width:1100px;margin:40px auto;line-height:1.55;padding:0 24px}pre{background:#f4f4f4;padding:14px;overflow:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:8px;text-align:left}h1,h2,h3{margin-top:1.4em}code{background:#f4f4f4;padding:2px 4px}</style></head>
+<body>
+<h1>GPU GEMM Performance Study — H200</h1>
+<p><strong>Status:</strong> Chapter start / baseline concepts. This report is intentionally separate from the earlier GPU memory/coalescing/MLP report. It will grow with the GEMM experiments.</p>
+
+<h2>Goal</h2>
+<p>Build a GEMM kernel progressively and use each version to understand GPU data movement, reuse, synchronization, latency hiding, Tensor Core feeding, and Hopper-specific asynchronous movement. Every stage follows: <strong>hand model → CUDA → PTX/SASS → NCU → correlation → next hypothesis</strong>.</p>
+
+<h2>Planned progression</h2>
+<pre>1. Naive FP32 GEMM
+2. Shared-memory tiled GEMM
+3. Double-buffered tiled GEMM
+4. Asynchronous global→shared staging / cp.async concepts
+5. Hopper TMA tile movement
+6. Tensor Core version
+7. Compare arithmetic intensity, hierarchy traffic, stalls, occupancy and throughput</pre>
+
+<h2>Memory hierarchy mental model for GEMM</h2>
+<pre>                         GPU
+                          |
+             +------------+------------+
+             |                         |
+            SM 0                      SM N
+             |
+     +-------+--------+
+     |       |        |
+ Registers  L1/TEX  Shared Memory
+     |       |        |
+     +-------+--------+
+             |
+       interconnect/fabric
+             |
+             v
+            L2
+             |
+             v
+      memory controllers
+             |
+             v
+            HBM</pre>
+<p><strong>Registers</strong> hold per-thread live operands/results and are also an occupancy resource. <strong>Shared memory</strong> is explicitly managed on-chip CTA storage and is central to operand reuse. <strong>L1/TEX</strong> is the SM-side hardware-managed cache/request subsystem. <strong>L2</strong> is GPU-wide. <strong>HBM</strong> is the large off-chip global-memory backing store.</p>
+
+<h3>Shared memory is not simply another cache level</h3>
+<pre>                  SM
+                   |
+        +----------+----------+
+        |                     |
+   Shared Memory             L1/TEX
+ software-managed        hardware-managed
+    scratchpad               cache/path
+        |                     |
+        +----------+----------+
+                   |
+                  L2
+                   |
+                  HBM</pre>
+
+<h2>Why GEMM?</h2>
+<p>For C=A×B, naïve execution repeatedly consumes A and B operands from the global hierarchy. Tiling allows a block to cooperatively stage subsets of A and B into shared memory and reuse them many times, increasing arithmetic intensity.</p>
+<pre>Naive:
+HBM/L2 -> A,B -> Registers -> FMA -> C
+
+Tiled:
+HBM/L2 -> A/B tiles -> Shared Memory -> repeated reuse -> Registers -> FMA
+
+Async tiled:
+load Tile N+1 into alternate shared buffer
+          ||
+compute Tile N from current shared buffer
+
+Hopper:
+TMA -> Shared tiles -> operand pipeline -> Tensor Cores</pre>
+
+<h2>Latency hiding mechanisms to distinguish</h2>
+<table>
+<tr><th>Mechanism</th><th>Question</th></tr>
+<tr><td>Occupancy / warp scheduling</td><td>Are other warps ready while one warp waits?</td></tr>
+<tr><td>ILP / MLP</td><td>Can one warp expose several independent operations/requests?</td></tr>
+<tr><td>Shared-memory reuse</td><td>Can one fetched operand serve many computations?</td></tr>
+<tr><td>Software pipelining</td><td>Can future data movement overlap current compute?</td></tr>
+<tr><td>TMA</td><td>Can Hopper hardware perform bulk multidimensional tile movement with less thread-side address/copy work?</td></tr>
+</table>
+
+<h2>cp.async and software pipelining</h2>
+<p>Traditional conceptual staging is <code>global → register → shared</code>. Asynchronous-copy mechanisms allow software to initiate future global-to-shared movement and perform independent work before waiting for the destination data.</p>
+<pre>Naive:
+LOAD tile0 -> WAIT -> COMPUTE tile0 -> LOAD tile1 -> WAIT -> COMPUTE tile1
+
+Pipelined:
+LOAD tile0
+           COMPUTE tile0 =================
+                LOAD tile1 --------------->
+                                      COMPUTE tile1 =================</pre>
+<p>Double buffering alternates shared-memory buffers so one buffer is consumed while another is filled.</p>
+
+<h2>Hopper TMA</h2>
+<p>The Tensor Memory Accelerator is Hopper's specialized mechanism for asynchronous bulk movement of multidimensional tensor tiles. Conceptually, software describes a tensor/tile transfer and hardware assists with multidimensional address generation and movement into the shared-memory staging pipeline.</p>
+<pre>Tensor in global memory
+        |
+        | TMA tile movement
+        v
+Shared-memory tile
+        |
+        v
+Registers / tensor operand pipeline
+        |
+        v
+Tensor Core compute</pre>
+
+<h2>Starting experiment: naïve FP32 GEMM</h2>
+<p>We begin deliberately with one thread computing one C element:</p>
+<pre>C[row][col] = 0
+for k = 0..K-1:
+    C[row][col] += A[row][k] * B[k][col]</pre>
+<p>Before coding the H200-sized version, the first exercise will trace a 4×4 GEMM by hand: which A/B values each thread needs, what adjacent warp lanes access, where reuse exists, what traffic is redundant, and how a shared-memory tile changes that traffic.</p>
+
+<h2>Measurements to retain at every stage</h2>
+<pre>- kernel duration
+- useful FLOP/s
+- arithmetic intensity model
+- global/L1/L2/DRAM traffic
+- sectors/request and coalescing where relevant
+- shared-memory traffic / bank-conflict behavior
+- registers/thread and spills
+- theoretical + achieved occupancy
+- eligible warps / scheduler issue behavior
+- scoreboard and other dominant stalls
+- compute and memory SpeedOfLight throughput
+- PTX/SASS structure
+- correctness validation</pre>
+
+<h2>Experiment log</h2>
+<p><em>No GEMM kernel measurements yet. Subsequent sections will be appended chronologically so predictions remain visible before measurements.</em></p>
+</body></html>
