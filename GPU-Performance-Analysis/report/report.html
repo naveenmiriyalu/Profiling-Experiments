@@ -240,6 +240,69 @@ result = [high | low]</pre>
 <h3>Fatbin: native code and PTX</h3>
 <p>The executable fatbin contains native <code>sm_90</code> ELF code as well as an embedded PTX image. The native section is what <code>cuobjdump --dump-sass</code>/<code>nvdisasm</code> expose as Hopper SASS; the PTX section remains a virtual-ISA representation. Keeping these layers separate is important when reasoning about what the hardware actually executes versus what the compiler frontend emitted.</p>
 <p><code>cuobjdump</code> also prints the two 64-bit words encoding each Hopper instruction. For this study we retain those encodings as evidence but analyze the human-readable SASS rather than attempting to decode the bitfields manually.</p>
+<h3>Nsight Compute metric discovery on this H200</h3>
+<p>Before selecting counters, the available metrics were queried from the installed Nsight Compute rather than assuming metric names from another CUDA release:</p>
+<pre>ncu --query-metrics | grep -Ei \
+'sector|dram.*bytes|lts.*sector|l1tex.*sector' \
+&gt; available_memory_metrics.txt</pre>
+<p>The query exposes several useful metric families. The full raw query output is intentionally kept as an experiment artifact; the categories below are the subset relevant to this study.</p>
+<table>
+<tr><th>Layer / question</th><th>Representative supported metrics</th></tr>
+<tr><td>DRAM bytes</td><td><code>dram__bytes</code>, <code>dram__bytes_read</code>, <code>dram__bytes_write</code></td></tr>
+<tr><td>DRAM sectors</td><td><code>dram__sectors</code>, <code>dram__sectors_read</code>, <code>dram__sectors_write</code></td></tr>
+<tr><td>L1/TEX sectors per request</td><td><code>l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld</code>, <code>..._op_st</code></td></tr>
+<tr><td>L1/TEX global sectors</td><td><code>l1tex__t_sectors_pipe_lsu_mem_global_op_ld</code>, <code>..._op_st</code></td></tr>
+<tr><td>L1/TEX load/store hit behavior</td><td><code>l1tex__t_sector_pipe_lsu_mem_global_op_ld_hit_rate</code>, <code>..._op_st_hit_rate</code></td></tr>
+<tr><td>L1↔L2 movement</td><td><code>l1tex__m_xbar2l1tex_read_sectors_mem_lg_op_ld</code>, <code>l1tex__m_l1tex2xbar_write_sectors_mem_lg_op_st</code></td></tr>
+<tr><td>L2 total/read/write sectors</td><td><code>lts__t_sectors</code>, <code>lts__t_sectors_op_read</code>, <code>lts__t_sectors_op_write</code></td></tr>
+<tr><td>L2 hit/miss</td><td><code>lts__t_sector_hit_rate</code>, <code>lts__t_sector_op_read_hit_rate</code>, <code>lts__t_sector_op_write_hit_rate</code>, plus explicit lookup-hit/miss counters</td></tr>
+<tr><td>L2 source attribution</td><td><code>lts__t_sectors_srcunit_tex*</code>, <code>lts__t_sectors_srcunit_l1*</code>, <code>lts__t_sectors_srcnode_gpc*</code></td></tr>
+<tr><td>SASS-level global sectors</td><td><code>sm__sass_l1tex_t_sectors_pipe_lsu_mem_global_op_ld</code>, <code>..._op_st</code>, <code>sm__sass_sectors_mem_global</code></td></tr>
+<tr><td>Useful bytes per sector</td><td><code>smsp__sass_average_data_bytes_per_sector_mem_global_op_ld</code>, <code>..._op_st</code></td></tr>
+</table>
+<p><strong>Metric semantics matter.</strong> A sector counter at L1/TEX, an L2 sector lookup, and a DRAM sector are observations at different points in the hierarchy; they should not be treated as interchangeable simply because all use a 32-B sector unit.</p>
+<h4>Targeted stride-1 metric set</h4>
+<p>Rather than repeatedly collecting the large Memory Workload Analysis section (which required 19 profiling passes), the next run uses a small counter set tied directly to the hand calculation:</p>
+<pre>ncu \
+  --force-overwrite \
+  --launch-skip 1 \
+  --launch-count 1 \
+  --metrics \
+l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld,\
+l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st,\
+l1tex__t_sectors_pipe_lsu_mem_global_op_ld,\
+l1tex__t_sectors_pipe_lsu_mem_global_op_st,\
+l1tex__t_sector_pipe_lsu_mem_global_op_ld_hit_rate,\
+dram__bytes_read,\
+dram__bytes_write,\
+lts__t_sectors_op_read,\
+lts__t_sectors_op_write,\
+smsp__sass_average_data_bytes_per_sector_mem_global_op_ld,\
+smsp__sass_average_data_bytes_per_sector_mem_global_op_st \
+  -o stride1_targeted \
+  ./stride_read</pre>
+<h4>Stride-1 predictions before measurement</h4>
+<pre>100,000,000 threads / 32 = 3,125,000 warps
+
+Input load:
+3,125,000 warps × 4 sectors/warp = 12,500,000 sectors
+128 useful B / 4 sectors = 32 useful B/sector
+
+Output store:
+3,125,000 warps × 4 sectors/warp = 12,500,000 sectors
+128 useful B / 4 sectors = 32 useful B/sector</pre>
+<table>
+<tr><th>Metric / derived quantity</th><th>Prediction</th></tr>
+<tr><td>Load sectors/request</td><td>4.0</td></tr>
+<tr><td>Store sectors/request</td><td>4.0</td></tr>
+<tr><td>Global load sectors</td><td>12,500,000</td></tr>
+<tr><td>Global store sectors</td><td>12,500,000</td></tr>
+<tr><td>Useful bytes/load sector</td><td>32 B</td></tr>
+<tr><td>Useful bytes/store sector</td><td>32 B</td></tr>
+<tr><td>Source-level useful load bytes</td><td>400 MB</td></tr>
+<tr><td>Source-level useful store bytes</td><td>400 MB</td></tr>
+</table>
+<p>For the later stride-2 experiment, the input prediction changes to 8 sectors/request, 25,000,000 load sectors and 16 useful B/sector, while the contiguous output-store predictions remain unchanged.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
