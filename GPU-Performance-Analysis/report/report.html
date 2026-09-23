@@ -342,6 +342,102 @@ L2 Cache Throughput         65.60%
 L1/TEX Cache Throughput     18.82%
 Compute (SM) Throughput     26.45%</pre>
 <p>The profiler's achieved 2.65 TB/s agrees closely with the standalone 2.647 TB/s useful-bandwidth calculation, while DRAM reaches only 55.16% of its reported peak-throughput reference. This does not mean that only 55% of source bytes reached DRAM; it is a utilization/throughput ratio. The next experiment phase investigates why the streaming kernel does not approach the device's peak bandwidth and whether the limiting factor is request generation, latency/MLP, memory-partition behavior, instruction/scheduler throughput, or another pipeline constraint.</p>
+<h3>Why only ~55% DRAM throughput? Scheduler, scoreboard, and occupancy analysis</h3>
+<p>After validating coalescing, the next question was why a perfectly coalesced streaming copy reached only 55.16% of the profiler's DRAM peak reference. Scheduler and warp-state data show that the kernel is primarily unable to keep enough warps instruction-ready while waiting on memory.</p>
+<h4>Scheduler statistics</h4>
+<table>
+<tr><th>Metric</th><th>Measured value</th></tr>
+<tr><td>Active warps / scheduler</td><td>11.15</td></tr>
+<tr><td>Eligible warps / scheduler</td><td>0.38</td></tr>
+<tr><td>One or more eligible</td><td>26.65%</td></tr>
+<tr><td>No eligible warp</td><td>73.35%</td></tr>
+<tr><td>Issued warp / scheduler</td><td>0.27</td></tr>
+</table>
+<p>The critical distinction is <strong>resident/active</strong> versus <strong>eligible</strong>. About 11 warps are active per scheduler, but on an average cycle only 0.38 are ready to issue. Thus a large resident-warp population does not automatically provide sufficient latency hiding.</p>
+<pre>Active/resident warps:  ~11.15 / scheduler
+                           |
+                           v
+Eligible/ready warps:     ~0.38 / scheduler
+                           |
+                           v
+No eligible warp:          73.35% of cycles
+                           |
+                           v
+Issue rate:                0.27 warp / scheduler / cycle</pre>
+<h4>Long-scoreboard dependency</h4>
+<p>Warp State Statistics report 41.84 warp cycles per issued instruction and approximately 34.7 cycles stalled on a scoreboard dependency associated with an L1TEX operation. NCU attributes this stall class to about 82.9% of the average interval between issued instructions.</p>
+<p>The SASS explains the dependency:</p>
+<pre>LDG.E.CONSTANT R7, ...
+        |
+        | produces R7
+        v
+STG.E ..., R7</pre>
+<p>The store consumes the value returned by the global load. Until the load result is available, the scoreboard marks the dependent operand unavailable and that warp cannot issue the consumer instruction. The 34.7-cycle statistic is a warp-state average; it must not be interpreted as direct HBM latency.</p>
+<h4>Occupancy: theoretical versus achieved</h4>
+<table>
+<tr><th>Occupancy metric</th><th>Value</th></tr>
+<tr><td>Block limit — barriers</td><td>32 blocks</td></tr>
+<tr><td>Block limit — SM architectural</td><td>32 blocks</td></tr>
+<tr><td>Block limit — registers</td><td>16 blocks</td></tr>
+<tr><td>Block limit — shared memory</td><td>32 blocks</td></tr>
+<tr><td>Block limit — warps</td><td>8 blocks</td></tr>
+<tr><td>Theoretical active warps / SM</td><td>64</td></tr>
+<tr><td>Theoretical occupancy</td><td>100%</td></tr>
+<tr><td>Achieved active warps / SM</td><td>45.55</td></tr>
+<tr><td>Achieved occupancy</td><td>71.17%</td></tr>
+</table>
+<p>Each block has 256 threads = 8 warps. The 64-warp/SM theoretical capacity therefore permits 64 / 8 = 8 resident blocks, making the warp limit the first resource limit. Register pressure is <strong>not</strong> the limiting resource: the register limit would permit 16 blocks, while shared memory and the architectural block limit would permit 32.</p>
+<pre>256 threads/block / 32 threads/warp = 8 warps/block
+
+64 theoretical warps/SM / 8 warps/block
+= 8 blocks/SM
+
+Therefore:
+Block Limit Warps = 8  ← first limiting resource
+Theoretical Occupancy = 100%</pre>
+<p>Measured achieved occupancy is lower because it is a runtime average, whereas theoretical occupancy is a resource-capacity calculation. NCU reports 45.55 active warps/SM, or 71.17% of 64, and notes scheduling overhead/workload imbalance as possible contributors.</p>
+<h4>Three distinct kinds of parallelism</h4>
+<table>
+<tr><th>Level</th><th>Observation</th><th>Interpretation</th></tr>
+<tr><td>Grid parallelism</td><td>390,625 blocks</td><td>There is abundant global work.</td></tr>
+<tr><td>SM residency</td><td>45.55 active warps/SM; theoretical max 64</td><td>Occupancy is substantial and is not register-limited.</td></tr>
+<tr><td>Instruction-ready parallelism</td><td>0.38 eligible warps/scheduler</td><td>This is the severe shortage: most resident warps are waiting.</td></tr>
+</table>
+<p>This demonstrates an important GPU performance principle: <strong>high or potentially high occupancy does not imply that a kernel successfully hides memory latency.</strong> Occupancy describes how much execution state can be resident; eligible-warps and stall metrics describe whether that resident state is actually ready to make forward progress.</p>
+<h4>Working hypothesis for the 55% result</h4>
+<p>The evidence now supports a latency-hiding / memory-level-parallelism hypothesis. The kernel has excellent coalescing and abundant grid parallelism, but each thread performs essentially one load whose result feeds the store. Many resident warps simultaneously wait on memory, leaving schedulers without eligible work for 73.35% of cycles. The next controlled experiment will increase independent loads per thread/warp and test whether additional ILP/MLP raises eligible-warps, lowers long-scoreboard stalls, and increases DRAM throughput.</p>
+<pre>Hypothesis:
+
+independent LDGs / warp ↑
+        |
+        v
+outstanding memory work ↑
+        |
+        v
+eligible warps ↑
+no-eligible cycles ↓
+scoreboard pressure ↓
+        |
+        v
+DRAM utilization ↑
+
+until another resource becomes limiting</pre>
+<h3>L2 decomposition after the stride-1 request-level correlation</h3>
+<table>
+<tr><th>Metric</th><th>Measured sectors</th></tr>
+<tr><td>DRAM read</td><td>12,500,480</td></tr>
+<tr><td>DRAM write</td><td>11,892,616</td></tr>
+<tr><td>L2 read operations</td><td>18,772,080</td></tr>
+<tr><td>L2 read lookup hits</td><td>1,603</td></tr>
+<tr><td>L2 read lookup misses</td><td>18,732,392</td></tr>
+<tr><td>L2 write operations</td><td>18,760,856</td></tr>
+<tr><td>L2 write lookup hits</td><td>18,745,116</td></tr>
+<tr><td>L2 write lookup misses</td><td>103</td></tr>
+<tr><td>L1TEX-source L2 reads</td><td>12,500,000</td></tr>
+<tr><td>L1TEX-source L2 writes</td><td>12,500,000</td></tr>
+</table>
+<p>The source-attributed L1TEX traffic again matches the hand model exactly: 12.5 M read sectors and 12.5 M write sectors. Therefore the larger ~18.77 M L2 read/write operation counts are not evidence that the coalescer generated extra source requests. They represent additional activity observed at the L2 operation level and require cache-internal decomposition before assigning a precise cause.</p>
+<p>The DRAM read count is also nearly exact: 12,500,480 sectors × 32 B ≈ 400.015 MB, matching the 400 MB useful input stream. The L2 data show that reads are overwhelmingly misses while writes are overwhelmingly lookup hits. The approximately 6.25 M-operation gap between source-attributed sectors and total L2 operations is retained as an investigation item; store allocation/fill/eviction or other internal L2 behavior is a hypothesis to test, not yet a conclusion.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
