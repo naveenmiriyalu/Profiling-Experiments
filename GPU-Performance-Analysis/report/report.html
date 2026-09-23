@@ -194,6 +194,49 @@ warp lane addresses
 coalescing / sectors
     ↓
 L1/TEX → L2 → HBM</pre>
+<h3>Multiword arithmetic and the 64-bit bounds comparison</h3>
+<p>The source uses <code>size_t</code>, so both the global index <code>i</code> and <code>n</code> are 64-bit values. The Hopper SASS performs the bounds check using two 32-bit pieces:</p>
+<pre>i = [ R3  | R2  ]
+      high   low
+
+n = [ UR5 | UR4 ]
+      high   low
+
+ISETP.GE.U32.AND    P0, PT, R2, UR4, PT;
+ISETP.GE.U32.AND.EX P0, PT, R3, UR5, PT, P0;
+@P0 EXIT;</pre>
+<p>Mathematically, the high word dominates a multiword comparison: if <code>A_hi &gt; B_hi</code>, then A is larger regardless of the low word; if <code>A_hi &lt; B_hi</code>, A is smaller; only when the high words are equal does the low-word comparison decide. The SASS need not implement that rule with branches. The first comparison produces predicate state from the low words and the <code>.EX</code> extended comparison combines it with the high-word comparison to form the final 64-bit result.</p>
+<h4>Example 1 — high word decides</h4>
+<pre>A = 0x00000002_00000001
+B = 0x00000001_FFFFFFFF
+
+A_hi = 2
+B_hi = 1
+
+A &gt; B immediately, even though A_lo is much smaller than B_lo.</pre>
+<h4>Example 2 — high words equal, low word decides</h4>
+<pre>A = 0x00000001_00000020
+B = 0x00000001_00000010
+
+A_hi == B_hi
+therefore compare low words:
+
+0x20 &gt; 0x10  →  A &gt; B</pre>
+<h4>Example 3 — multiword addition analogy</h4>
+<p>The same idea appears in arithmetic. A 64-bit operation can be constructed from narrower operations by propagating carry/state between words:</p>
+<pre>A = [A_hi | A_lo]
+B = [B_hi | B_lo]
+
+low  = A_lo + B_lo
+             |
+           carry
+             v
+high = A_hi + B_hi + carry
+
+result = [high | low]</pre>
+<p>The extended comparison is conceptually similar: information from one word participates in the operation on the next word, avoiding branch-heavy source-like logic.</p>
+<h4>Why the high half of <code>i</code> is zero in this run</h4>
+<p>The experiment launches only 100,000,000 threads, well below 2<sup>32</sup>. Thus the high 32 bits of the current global index are zero. The SASS initializes that high piece with <code>IMAD.MOV.U32 R3, RZ, RZ, RZ</code>. Nevertheless, because the kernel interface uses 64-bit <code>size_t</code>, the generated code remains correct for larger 64-bit index values rather than specializing itself to this particular launch size.</p>
 <h3>Fatbin: native code and PTX</h3>
 <p>The executable fatbin contains native <code>sm_90</code> ELF code as well as an embedded PTX image. The native section is what <code>cuobjdump --dump-sass</code>/<code>nvdisasm</code> expose as Hopper SASS; the PTX section remains a virtual-ISA representation. Keeping these layers separate is important when reasoning about what the hardware actually executes versus what the compiler frontend emitted.</p>
 <p><code>cuobjdump</code> also prints the two 64-bit words encoding each Hopper instruction. For this study we retain those encodings as evidence but analyze the human-readable SASS rather than attempting to decode the bitfields manually.</p>
