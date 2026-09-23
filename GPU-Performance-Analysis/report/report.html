@@ -567,6 +567,54 @@ Measure simultaneously:
 - achieved occupancy
 - register usage</pre>
 <p>Because Triad already reaches 82.73% L2 throughput, an MLP4/MLP8 experiment may reveal a new bottleneck before HBM reaches 100%. The experiment should determine that transition rather than assuming HBM remains the next limiting resource.</p>
+<h3>Controlled per-warp MLP sweep: MLP1 → MLP8</h3>
+<p>To separate total work from independent memory-level parallelism, the MLP benchmark keeps total active elements and useful traffic approximately constant while varying the number of disjoint contiguous streams handled by each thread. Each stream remains coalesced across warp lanes.</p>
+<table>
+<tr><th>Independent loads/thread</th><th>Elements/stream</th><th>Kernel time</th><th>Useful traffic</th><th>Useful bandwidth</th></tr>
+<tr><td>1</td><td>100,000,000</td><td>0.299 ms</td><td>0.800 GB</td><td>2.674 TB/s</td></tr>
+<tr><td>2</td><td>50,000,000</td><td>0.218 ms</td><td>0.800 GB</td><td>3.671 TB/s</td></tr>
+<tr><td>4</td><td>25,000,000</td><td>0.199 ms</td><td>0.800 GB</td><td>4.010 TB/s</td></tr>
+<tr><td>8</td><td>12,500,000</td><td>0.207 ms</td><td>0.800 GB</td><td>3.865 TB/s</td></tr>
+</table>
+<p>MLP1 reproduces the original Copy result closely. Increasing independent loads raises useful bandwidth strongly through MLP4: MLP4 is about 1.50× MLP1 at the application-useful-byte level. MLP8 then regresses slightly. This identifies an experimental knee rather than a monotonic “more MLP is always better” relationship.</p>
+<h4>SASS validation: the compiler preserved the intended independence</h4>
+<p>Before interpreting the timing sweep, native Hopper SASS was checked to ensure the compiler emitted multiple loads before their dependent stores.</p>
+<pre>MLP4, simplified:
+
+LDG → R17 ─────────────→ STG
+LDG → R5  ─────────────→ STG
+LDG → R7  ─────────────→ STG
+LDG → R9  ─────────────→ STG
+
+The four LDGs appear before the four STGs.</pre>
+<p>The MLP8 variant likewise contains eight global loads before eight stores:</p>
+<pre>LDG → R0
+LDG → R2
+LDG → R3
+LDG → R4
+LDG → R5
+LDG → R17
+LDG → R27
+LDG → R25
+      ...
+8 corresponding STGs</pre>
+<p>This validates that the experiment changes actual machine-level per-warp load independence rather than only changing C++ source structure.</p>
+<h4>Architectural cost of increasing MLP</h4>
+<p>More independent loads require more simultaneously live values and address state. MLP8 visibly retains eight load results in registers until the stores consume them. Therefore increasing MLP can improve outstanding memory work while also increasing register/state pressure and instruction/address-generation overhead. The slight MLP8 regression makes register occupancy, L2/DRAM saturation, LSU/request-pipeline pressure, and additional instruction overhead explicit hypotheses for the next counter sweep; none is yet selected as the cause.</p>
+<pre>MLP ↑
+  |
+  +-- outstanding memory requests ↑      (potential benefit)
+  |
+  +-- live result/address state ↑        (potential cost)
+  |
+  +-- address-generation instructions ↑ (potential cost)
+  |
+  +-- cache/request-pipeline pressure ↑  (potential cost)
+
+Observed knee: MLP4 ≈ 4.01 TB/s; MLP8 ≈ 3.87 TB/s</pre>
+<h3>Triad measured result and revised MLP interpretation</h3>
+<p>Triad achieved 3.446 TB/s useful bandwidth. Targeted NCU measured 800.03 MB DRAM reads, 25,000,000 global-load sectors, 12,500,000 global-store sectors, and four sectors/request for both load and store instructions. Scheduler behavior did not improve: active warps/scheduler rose slightly to 11.65, but eligible warps remained 0.37, no-eligible cycles increased to 75.37%, and long-scoreboard waiting rose to 41.0 cycles (86.8% of the issue interval). Achieved occupancy was 74.25%.</p>
+<p>Speed-of-Light profiling showed DRAM throughput increasing from Copy's 55.16% to Triad's 71.97%, while L2 throughput increased from 65.60% to 82.73%. Thus Triad drove the memory hierarchy harder without making individual consumer warps less latency-bound. This refines the earlier hypothesis: more independent loads can increase aggregate memory-system utilization even when warp-level scoreboard waiting remains severe.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
