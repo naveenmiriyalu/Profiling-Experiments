@@ -153,6 +153,50 @@ nvdisasm stride_read.cubin &gt; stride_read.sass
 # Alternative extraction from the executable
 cuobjdump --dump-sass stride_read &gt; cuobjdump.sass</pre>
 <p>On the captured Hopper SASS, the key machine instructions include <code>S2R</code>/<code>S2UR</code> for thread/block IDs, <code>IMAD</code>/<code>LEA</code> for index/address generation, <code>LDG.E.CONSTANT</code> for the input load, and <code>STG.E</code> for the output store. The kernel metadata reports a register count of 10.</p>
+<h3>Detailed Hopper SASS walkthrough</h3>
+<p>The native <code>sm_90</code> kernel is small enough to follow from CUDA source to machine instructions. The walkthrough below focuses on architectural meaning rather than manually decoding the 128-bit instruction encodings.</p>
+<pre>/*0010*/ S2R  R2, SR_TID.X;
+/*0020*/ S2UR UR4, SR_CTAID.X;
+/*0040*/ LDC  R5, c[0x0][RZ];
+/*0050*/ IMAD.WIDE.U32 R2, R5, UR4, R2;</pre>
+<p><strong>Thread identification.</strong> <code>S2R</code> reads the thread ID special register, while <code>S2UR</code> obtains the CTA/block ID as a uniform value. Together with the loaded block dimension, <code>IMAD.WIDE.U32</code> forms the 64-bit global index corresponding to <code>blockIdx.x * blockDim.x + threadIdx.x</code>. The low/high pieces are carried in the register pair beginning at R2.</p>
+<pre>/*0060*/ ULDC.64 UR4, c[0x0][0x220];
+/*0070*/ ISETP.GE.U32.AND    P0, PT, R2, UR4, PT;
+/*0080*/ ISETP.GE.U32.AND.EX P0, PT, R3, UR5, PT, P0;
+/*0090*/ @P0 EXIT;</pre>
+<p><strong>Bounds check.</strong> The compiler compares the 64-bit global index against <code>n</code> using low/high pieces. Predicate P0 represents the out-of-range condition; <code>@P0 EXIT</code> implements the early exit. In the initial run, 390625 blocks × 256 threads equals exactly 100,000,000 threads, so there is no partial final block.</p>
+<pre>/*00a0*/ ULDC UR5, c[0x0][0x228];
+/*00c0*/ USHF.R.S32.HI UR4, URZ, 0x1f, UR5;
+/*00d0*/ IMAD R7, R3, UR5, RZ;
+/*00e0*/ IMAD.WIDE.U32 R4, R2, UR5, RZ;
+/*00f0*/ IMAD R7, R2, UR4, R7;
+/*0110*/ LEA R6, P0, R4, UR4, 0x2;
+/*0120*/ IMAD.IADD R5, R5, 0x1, R7;
+/*0130*/ LEA.HI.X R7, R4, UR5, R5, 0x2, P0;</pre>
+<p><strong>Input address generation.</strong> <code>stride</code> remains a runtime kernel argument. The IMAD sequence forms the wide <code>i × stride</code> result. The LEA pair incorporates the input base address and a shift of 2, corresponding to multiplication by <code>sizeof(float) = 4</code>. Conceptually the generated address is <code>in + i × stride × 4</code>.</p>
+<pre>/*0150*/ LDG.E.CONSTANT R7, desc[UR4][R6.64];</pre>
+<p><strong>Global load.</strong> This is the native Hopper instruction corresponding to the source-level <code>in[i * stride]</code>. Across a warp, the 32 lane-generated addresses presented by this load determine the coalescing/sector behavior studied in this experiment. For stride 1, the working prediction is 32 FP32 lane loads = 128 useful bytes occupying four aligned 32-B sectors.</p>
+<pre>/*0160*/ LEA R4, P0, R2, UR6, 0x2;
+/*0170*/ LEA.HI.X R5, R2, UR7, R3, 0x2, P0;
+/*0180*/ STG.E desc[UR4][R4.64], R7;
+/*0190*/ EXIT;</pre>
+<p><strong>Output address and store.</strong> Output is always contiguous, so the LEA pair forms <code>out + i × 4</code>, followed by the global <code>STG.E</code>. This matters when interpreting later stride sweeps: input coalescing degrades with stride, while the output-store address pattern remains contiguous.</p>
+<pre>CUDA source
+    ↓
+PTX virtual ISA
+    ↓
+ptxas
+    ↓
+native Hopper SASS
+    ↓
+warp lane addresses
+    ↓
+coalescing / sectors
+    ↓
+L1/TEX → L2 → HBM</pre>
+<h3>Fatbin: native code and PTX</h3>
+<p>The executable fatbin contains native <code>sm_90</code> ELF code as well as an embedded PTX image. The native section is what <code>cuobjdump --dump-sass</code>/<code>nvdisasm</code> expose as Hopper SASS; the PTX section remains a virtual-ISA representation. Keeping these layers separate is important when reasoning about what the hardware actually executes versus what the compiler frontend emitted.</p>
+<p><code>cuobjdump</code> also prints the two 64-bit words encoding each Hopper instruction. For this study we retain those encodings as evidence but analyze the human-readable SASS rather than attempting to decode the bitfields manually.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
