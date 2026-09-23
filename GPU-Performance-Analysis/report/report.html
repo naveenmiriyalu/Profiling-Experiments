@@ -738,6 +738,44 @@ nvcc -O3 -arch=sm_90 -lineinfo -Xptxas=-v mlp_copy.cu -o mlp_copy_ptxas \
 ncu --query-metrics | grep -Ei \
 'inst_executed|pipe_lsu|mem_global|long_scoreboard|mio|issue' \
 &gt; mlp_pipeline_available.txt</pre>
+<h3>Final MLP conclusion: upstream grouping versus downstream balance</h3>
+<p>The final MLP4/MLP8 comparison examined the min/max reductions across the hardware instances underlying the selected L1TEX, L2 and DRAM metrics. MLP8 shows a much wider upstream L1TEX request distribution, but that widening is largely absent at L2 and DRAM.</p>
+<table>
+<tr><th>Metric</th><th>MLP4 min → max</th><th>MLP8 min → max</th></tr>
+<tr><td>L1TEX load requests</td><td>22,880 → 24,448</td><td>20,864 → 32,000</td></tr>
+<tr><td>L1TEX store requests</td><td>23,264 → 24,480</td><td>20,096 → 31,808</td></tr>
+<tr><td>L2 read sectors</td><td>198,200 → 201,474</td><td>196,332 → 201,952</td></tr>
+<tr><td>L2 write sectors</td><td>197,711 → 201,360</td><td>196,853 → 201,876</td></tr>
+<tr><td>DRAM read</td><td>4.26 → 8.51 MB</td><td>4.26 → 8.51 MB</td></tr>
+</table>
+<p>This weakens the hypothesis that MLP8 regresses because of an obvious HBM-partition imbalance. The large upstream spread is not preserved in the downstream aggregate-instance reductions. The exact physical identity of every NCU metric instance was not established here, so the report does not equate an instance index with a particular HBM channel or L2 slice.</p>
+<h4>Closed MLP diagnosis</h4>
+<pre>MLP8 regression hypotheses:
+
+extra useful bytes?             eliminated
+bad coalescing?                 eliminated
+more aggregate LSU requests?    eliminated
+register spilling?              eliminated
+occupancy collapse?             eliminated
+theoretical occupancy loss?     eliminated
+obvious downstream imbalance?   weakened / not supported
+
+Observed costs at MLP8:
+- 30 registers/thread versus 20 at MLP4
+- more values and addresses simultaneously live
+- longer per-warp dependency span
+- no-eligible cycles rise to 87.13%
+- L2/DRAM no longer improve beyond the MLP4 point
+
+Observed MLP4 operating point:
+- useful BW: 4.010 TB/s
+- DRAM throughput: 85.15%
+- L2 throughput: 90.58%
+- no spills
+- 100% theoretical occupancy</pre>
+<p><strong>Conclusion:</strong> MLP4 is the observed operating knee for this kernel/configuration. Increasing independent loads from one to four substantially improves how effectively the kernel feeds the H200 memory hierarchy. Increasing from four to eight does not add aggregate source memory work or aggregate LSU requests and does not increase downstream throughput. Instead it increases per-warp state/dependency duration and scheduler starvation while the hierarchy is already highly utilized. This is deliberately stated as an empirical architectural conclusion rather than assigning the knee to an undocumented internal queue.</p>
+<h4>Methodological lesson</h4>
+<p>The MLP chapter demonstrates a reusable performance-engineering method: hold useful work constant; vary one architectural property; validate the generated SASS; measure request-level, hierarchy, scheduler and occupancy behavior; form hypotheses; and eliminate explanations with targeted counters. The next stride chapter changes a different variable: transaction efficiency rather than request concurrency.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
