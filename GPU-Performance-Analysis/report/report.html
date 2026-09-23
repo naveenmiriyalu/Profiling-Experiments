@@ -885,6 +885,131 @@ Compute current Tile N ====================
 Goal:
 hide data-movement latency behind useful compute</pre>
 <p>The concepts are complementary. <strong>MLP</strong> asks how many independent memory operations can be outstanding. <strong>Software pipelining</strong> asks whether future data movement can overlap current useful computation. <strong>TMA</strong> provides Hopper-specific hardware support for efficient bulk multidimensional tensor movement. These ideas will be revisited after the basic stride/cache experiments in a progression from naïve tiled GEMM to asynchronous staging and then Hopper-oriented TMA pipelines.</p>
+<h3>GPU memory hierarchy: working mental model</h3>
+<p>Before moving into GEMM, the study uses the following Hopper/H200-oriented conceptual hierarchy. Registers, shared memory and L1/TEX are SM-local resources; L2 is GPU-wide; HBM is the large off-chip global-memory backing store.</p>
+<pre>                         GPU
+                          |
+             +------------+------------+
+             |                         |
+            SM 0                      SM N
+             |
+     +-------+--------+
+     |       |        |
+ Registers  L1/TEX  Shared Memory
+     |       |        |
+     +-------+--------+
+             |
+       interconnect/fabric
+             |
+             v
+            L2              GPU-wide
+             |
+             v
+      memory controllers
+             |
+             v
+           HBM</pre>
+<h4>Registers</h4>
+<p>Registers hold per-thread live values closest to execution. They are both a performance resource and an occupancy resource. The MLP experiment made this concrete: register usage increased from 8 → 12 → 20 → 30 registers/thread for MLP1/2/4/8 as more independent addresses and load results remained live. Excessive register demand can eventually reduce resident blocks/warps; in the measured MLP8 case it reached, but did not exceed, the existing eight-block warp limit and caused no spills.</p>
+<h4>Shared memory: software-managed on-chip storage</h4>
+<p>Shared memory is explicitly addressed storage shared by threads of a CTA/block. It should not be thought of simply as another transparent cache level. The programmer decides what data to stage and reuse there.</p>
+<pre>One CTA:
+Thread 0  --+
+Thread 1  ---+
+...          +----> Shared Memory
+Thread 255 --+
+
+Goal for tiling:
+global/L2 data -> shared tile -> many thread reuses -> registers -> compute</pre>
+<p>This is the central mechanism for the upcoming tiled GEMM: values loaded from the global hierarchy can be reused by many threads instead of repeatedly fetching equivalent operands from farther away.</p>
+<h4>L1/TEX: hardware-managed SM-side cache/request subsystem</h4>
+<p>Ordinary global loads interact with the SM-side L1/TEX path. This is also where the coalescing/sector model used earlier becomes visible. A full aligned FP32 warp requests 32 × 4 B = 128 useful bytes, mapping to four 32-B sectors; NCU measured exactly four sectors/request for the stride-1 kernels.</p>
+<pre>warp LDG
+   |
+   v
+coalescing / sector requests
+   |
+   v
+L1/TEX
+   | hit
+   +------> return data
+   |
+   | miss
+   v
+  L2</pre>
+<h4>Shared memory versus L1</h4>
+<pre>                  SM
+                   |
+        +----------+----------+
+        |                     |
+   Shared Memory             L1/TEX
+ software-managed        hardware-managed
+    scratchpad               cache/path
+        |                     |
+        +----------+----------+
+                   |
+                  L2</pre>
+<p>Both are on-chip/SM-side resources, but their programming models differ fundamentally: shared memory is explicitly allocated/addressed and synchronized by software, whereas L1 caching is hardware managed.</p>
+<h4>L2: GPU-wide cache and transaction point</h4>
+<p>L2 is shared across SMs and sits between SM-side traffic and HBM. The earlier measurements showed why counters from different hierarchy levels cannot be treated as interchangeable: L1/TEX source sectors, total L2 operations and DRAM sectors represent different transaction points and can have different counts.</p>
+<pre>SM0 --+
+SM1 ---+
+SM2 ----+----> L2 ----> HBM
+... ----+
+SMn ---+</pre>
+<h4>HBM / global memory</h4>
+<p>CUDA global allocations are backed by the GPU's global-memory system/HBM. Peak HBM bandwidth is a hardware capability, not a bandwidth guarantee for a kernel. The same H200 delivered roughly 56% DRAM throughput for Copy, 72% for Triad and 85% for MLP4 because access efficiency and the ability to generate enough outstanding work differ.</p>
+<h4>Local memory: not a small fast local store</h4>
+<p>CUDA local memory is a per-thread address space that can be serviced through the cache/global-memory hierarchy. Register spilling is a common source of local-memory traffic. The MLP ptxas reports showed zero spill loads/stores, so the measured MLP curve was not secretly dominated by spill traffic.</p>
+<h4>Constant and texture-oriented paths</h4>
+<p>CUDA constant memory is intended for small read-only data with broadcast-friendly access patterns. Do not infer CUDA constant-memory usage merely from a SASS modifier such as <code>LDG.E.CONSTANT</code>; ISA cache-policy terminology and CUDA address spaces are distinct concepts. The profiler's <code>L1/TEX</code> terminology also reflects GPU texture/surface heritage and specialized graphics-oriented access machinery, which will be revisited in the later graphics chapter.</p>
+<h4>Relative latency/capacity intuition</h4>
+<pre>very close / small
+        |
+     Registers
+        |
+   Shared Memory     L1/TEX
+        \             /
+         \           /
+              L2
+               |
+              HBM
+               |
+       farther / huge</pre>
+<p>This is a relative mental model, not an exact latency table. Shared memory is shown alongside rather than simply below L1 because it is explicitly managed scratchpad storage rather than a transparent cache level.</p>
+<h4>Adding asynchronous movement</h4>
+<pre>ordinary demand path:
+HBM -> L2 -> L1/TEX -> Registers -> Compute
+
+tiled staging:
+HBM -> L2 -> Shared Memory -> Registers -> Compute
+
+software-pipelined tiled staging:
+future tile:  HBM/L2 ---------> Shared buffer B
+current tile: Shared buffer A -> Registers -> Compute
+
+Hopper TMA-oriented view:
+HBM -> L2/fabric -> TMA tile movement -> Shared Memory
+                                      -> operand pipeline / Tensor Cores</pre>
+<p>MLP and asynchronous staging solve related but distinct problems. MLP increases independent outstanding memory operations. Software pipelining overlaps future data movement with current useful computation. Hopper TMA provides specialized support for bulk multidimensional tensor movement.</p>
+<h3>Why GEMM exposes the whole hierarchy</h3>
+<p>GEMM is the next exercise because it makes reuse and data movement visible at nearly every level.</p>
+<pre>Naive GEMM:
+HBM/L2 -> A,B operands -> Registers -> FMA -> C
+
+Shared-memory tiled GEMM:
+HBM/L2 -> cooperative A/B tile loads -> Shared Memory
+                                      -> repeated reuse
+                                      -> Registers -> FMA
+
+Async tiled GEMM:
+load Tile N+1 into alternate shared buffer
+          ||
+compute Tile N from current shared buffer
+
+Hopper pipeline:
+TMA -> shared-memory tiles -> register/tensor-core operand path -> Tensor Cores</pre>
+<p>The planned progression is therefore: naïve FP32 GEMM → shared-memory tiled GEMM → double-buffered/asynchronous staging → cp.async-style pipeline → Hopper TMA → Tensor Core version. At every stage the study will preserve the same methodology used for the MLP chapter: hand model → code → PTX/SASS → targeted NCU → architectural explanation.</p>
 <h3>Prediction → Measurement → Correlation</h3>
 <p class="pending">Next: annotate the SASS path in detail, then collect NCU sector/cache/HBM metrics and compare them with the stride-1 prediction.</p>
 <h2>Roadmap</h2>
