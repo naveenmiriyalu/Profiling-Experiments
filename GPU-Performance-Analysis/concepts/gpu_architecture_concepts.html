@@ -1,0 +1,126 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>GPU Architecture Specifications and Concepts</title>
+<style>body{font-family:Arial,sans-serif;max-width:1120px;margin:40px auto;line-height:1.55;padding:0 24px}pre{background:#f4f4f4;padding:14px;overflow:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:8px;text-align:left}h1,h2,h3{margin-top:1.4em}code{background:#f4f4f4;padding:2px 4px}</style></head><body>
+<h1>GPU Architecture — Specifications and Concepts</h1>
+<p><strong>Purpose:</strong> persistent architecture reference for the GPU performance study. Experimental reports (memory/MLP, GEMM, graphics, LLM kernels) should reference this document rather than repeatedly redefining foundational concepts.</p>
+
+<h2>1. Hopper/H200-oriented hierarchy</h2>
+<pre>                         GPU
+                          |
+             +------------+------------+
+             |                         |
+            GPC                        GPC
+             |                          |
+          SM groups                  SM groups
+             |                          |
+       +-----+------+             +-----+------+
+       |     |      |             |     |      |
+     Regs  L1/TEX  Shared       Regs  L1/TEX  Shared
+       \     |      /             \     |      /
+        +----+-----+               +----+-----+
+             \                          /
+              \                        /
+               +---- on-chip fabric --+
+                         |
+                  partitioned L2
+                         |
+                  memory partitions /
+                  memory controllers
+                         |
+                        HBM</pre>
+<p>Registers, shared memory and L1/TEX are SM-local resources. L2 is GPU-wide and partitioned. HBM is off-chip device memory. Shared memory is explicitly managed scratchpad storage rather than merely another transparent cache level.</p>
+
+<h2>2. Registers, shared memory, L1/TEX, L2, HBM</h2>
+<table><tr><th>Resource</th><th>Scope / management</th><th>Performance role</th></tr>
+<tr><td>Registers</td><td>Per-thread live state</td><td>Operands/results; register demand can limit residency</td></tr>
+<tr><td>Shared memory</td><td>CTA-visible, software managed</td><td>Tiling, reuse, explicit staging, synchronization</td></tr>
+<tr><td>L1/TEX</td><td>SM-side, hardware managed</td><td>Coalescing/cache/request path for many memory operations</td></tr>
+<tr><td>L2</td><td>GPU-wide, partitioned</td><td>Shared caching and transaction point before HBM</td></tr>
+<tr><td>HBM</td><td>Off-chip global memory</td><td>Large capacity and high bandwidth; substantially higher latency than on-chip storage</td></tr></table>
+
+<h3>Sector/coalescing reminder</h3>
+<pre>32 FP32 lanes × 4 B = 128 useful B
+128 B / 32-B sector = 4 sectors for an aligned contiguous warp access</pre>
+<p>The earlier H200 experiment validated exactly four sectors/request for contiguous FP32 global loads/stores.</p>
+
+<h2>3. Local, constant and texture-related memory concepts</h2>
+<p>CUDA local memory is a per-thread address space that may be serviced through the cache/global-memory hierarchy; register spills are a common source of local-memory traffic. CUDA constant memory is intended for small read-only/broadcast-friendly data. L1/TEX terminology reflects the unified L1/texture subsystem and GPU texture/surface heritage.</p>
+
+<h2>4. The on-chip interconnect: what sits between SM-side requests, L2 and memory partitions?</h2>
+<p>A GPU is not wired as “every SM directly talks to one monolithic L2 cache.” Requests from many SMs/GPCs must be routed to the appropriate distributed/partitioned cache and memory resources. A useful conceptual model is a high-bandwidth on-chip fabric/crossbar network:</p>
+<pre>       SMs / GPCs
+      /   |   |   \
+     v    v   v    v
+ +---------------------+
+ |   on-chip routing   |
+ |  fabric / crossbar  |
+ +---------------------+
+   |      |      |      |
+   v      v      v      v
+ L2 P0  L2 P1  L2 P2  L2 Pn
+   |      |      |      |
+   v      v      v      v
+ memory partitions/controllers
+             |
+             v
+            HBM</pre>
+<p>The important architectural idea is <strong>many-to-many bandwidth</strong>: many SM-side clients can generate traffic concurrently, and addresses distribute traffic across partitioned downstream resources. The fabric must sustain enormous aggregate traffic so the compute array, L2 and HBM can operate in parallel.</p>
+
+<h3>Why “the interconnect inside a GPU is good” is reasonable—but incomplete</h3>
+<p>On-chip communication is engineered for much higher aggregate bandwidth and lower latency than off-chip communication. This is one reason thousands of execution lanes can feed a shared L2/HBM subsystem. But it does not mean the fabric is infinitely fast or contention-free. Address mapping, request distribution, L2 partitions, crossbar ports, queues, memory partitions and hot spots can all matter. A profiler may therefore expose different utilization/imbalance at SM/L1TEX, L2 and DRAM levels.</p>
+<p>Our MLP4/MLP8 experiment illustrated this nicely: request distribution widened strongly across upstream L1TEX metric instances at MLP8, while L2 reductions stayed comparatively tight and DRAM min/max was essentially unchanged. That suggests downstream routing/partitioning smooths much of the upstream distribution; it does not prove a particular undocumented topology.</p>
+
+<h3>Hopper locality hierarchy</h3>
+<pre>Thread
+  |
+Warp
+  |
+CTA / Thread Block
+  |
+SM
+  |
+Thread Block Cluster
+  |
+GPC (physically nearby SMs)
+  |
+GPU-wide L2 / memory fabric
+  |
+HBM</pre>
+<p>Hopper adds thread-block clusters: groups of blocks guaranteed to run concurrently on a group of SMs within a GPC. This exposes locality/cooperation beyond a single SM and is relevant to distributed shared memory and advanced Hopper kernels.</p>
+
+<h2>5. Do not confuse three different “interconnects”</h2>
+<table><tr><th>Interconnect</th><th>Where</th><th>Example purpose</th></tr>
+<tr><td>On-chip GPU fabric/crossbar</td><td>Inside one GPU die</td><td>Route SM/GPC traffic to L2/memory-side resources</td></tr>
+<tr><td>NVLink</td><td>GPU↔GPU (and supported coherent/chip-to-chip systems)</td><td>High-bandwidth peer GPU communication</td></tr>
+<tr><td>PCIe</td><td>GPU↔host/platform devices</td><td>Host/device and platform I/O</td></tr></table>
+<p>When discussing “internal GPU interconnect” in the memory-hierarchy context, the first row is usually what matters. NVLink is a different, external chip/device interconnect.</p>
+
+<h2>6. Hopper external interconnect reference</h2>
+<p>H100 introduced fourth-generation NVLink. NVIDIA documents 18 links at 50 GB/s bidirectional data rate per link, yielding 900 GB/s aggregate bidirectional NVLink bandwidth for H100. This is distinct from the internal SM↔L2↔memory fabric.</p>
+
+<h2>7. Asynchronous data movement</h2>
+<pre>ordinary demand:
+HBM -> L2 -> L1/TEX -> Registers -> Compute
+
+shared-memory staging:
+HBM -> L2 -> Shared -> Registers -> Compute
+
+software pipeline:
+future tile: HBM/L2 ----------> Shared B
+current tile: Shared A -> Registers -> Compute
+
+Hopper:
+TMA tile movement -> Shared -> Tensor operand pipeline -> Tensor Cores</pre>
+<p>MLP increases independent outstanding memory operations. Software pipelining overlaps future data movement with current compute. TMA provides Hopper hardware support for bulk multidimensional tensor movement.</p>
+
+<h2>8. Reference specifications used in this study</h2>
+<p>For the H100/Hopper architectural reference, NVIDIA documents a full GH100 implementation with 8 GPCs, up to 144 SMs, 60 MB L2 and 12 512-bit memory controllers; shipping H100 configurations use subsets of the full implementation. H100 SXM5 is documented with 132 SMs, 50 MB L2, five HBM3 stacks and ten 512-bit memory controllers. H200 is also Hopper-family but has product-specific HBM capacity/bandwidth; experimental measurements should use the actual device under test rather than blindly substituting H100 board specifications.</p>
+
+<h2>9. Questions to investigate experimentally</h2>
+<pre>- How does address mapping distribute traffic across L2/memory instances?
+- Can a deliberately pathological mapping create partition camping?
+- How much L2 bandwidth can one versus many GPCs/SMs generate?
+- How do thread-block clusters and distributed shared memory change locality?
+- At what point does L2/fabric pressure become visible before HBM saturation?
+- How do TMA pipelines alter request generation and fabric traffic?</pre>
+</body></html>
