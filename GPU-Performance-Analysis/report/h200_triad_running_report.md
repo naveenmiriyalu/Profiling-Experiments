@@ -53,4 +53,23 @@ Keep binary `.ncu-repz` files safely backed up. Exported reports have not been s
 5. Repeat with stride and MLP kernels and compare against Triad.
 
 ## Data integrity
-No actual HBM traffic values, cache hit rates, eligible-warp rates or scoreboard percentages have yet been measured in the provided output. Do not infer them from profiling console timings.
+Actual NCU normalized throughput metrics are now available above, but HBM byte counts, cache hit rates, eligible-warp rates and scoreboard percentages have not yet been provided. Do not infer them from profiling console timings.
+
+## Nsight Compute Speed of Light (measured)
+
+Kernel `triad`, launch 390625 blocks x 256 threads; device CC 9.0, stream 7. Source: user-shared NCU SpeedOfLight text.
+
+| Metric | Result |
+|---|---:|
+| GPU kernel duration | 342.37 us |
+| Elapsed cycles | 677,353 |
+| SM active cycles | 675,041.19 |
+| SM frequency | 1.98 GHz |
+| DRAM frequency (NCU reported) | 3.20 GHz |
+| Memory throughput | 72.15% |
+| DRAM throughput | 72.15% |
+| L2 cache throughput | 82.82% |
+| L1/TEX cache throughput | 18.93% |
+| Compute (SM) throughput | 24.49% |
+
+At 342.37 us and 1.2 GB algorithmic bytes, useful bandwidth would be approximately 3.505 TB/s. This is derived, **not** a measured DRAM byte throughput. L2/HBM percentage metrics are normalized to distinct peak baselines and cannot be interpreted as execution-time fractions. L2 being 82.82% vs DRAM 72.15% does not alone prove L2 is the limiter. Next inspect exact memory-sector and DRAM byte counters, scheduler eligibility/stalls, and occupancy.
