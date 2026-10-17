@@ -73,3 +73,22 @@ Kernel `triad`, launch 390625 blocks x 256 threads; device CC 9.0, stream 7. Sou
 | Compute (SM) throughput | 24.49% |
 
 At 342.37 us and 1.2 GB algorithmic bytes, useful bandwidth would be approximately 3.505 TB/s. This is derived, **not** a measured DRAM byte throughput. L2/HBM percentage metrics are normalized to distinct peak baselines and cannot be interpreted as execution-time fractions. L2 being 82.82% vs DRAM 72.15% does not alone prove L2 is the limiter. Next inspect exact memory-sector and DRAM byte counters, scheduler eligibility/stalls, and occupancy.
+
+## NCU targeted memory counters (user-supplied excerpt)
+
+| Counter | Value |
+|---|---:|
+| DRAM read bytes (sum) | 800.05 MB |
+| DRAM write bytes (sum) | 388.02 MB |
+| DRAM read sectors (sum) | 25,001,632 |
+| DRAM write sectors (sum) | 12,125,728 |
+| L1TEX global load sectors (sum) | 25,000,000 |
+| L1TEX global store sectors (sum) | 12,500,000 |
+| L1TEX global load sectors/request | 4 |
+| L1TEX global store sectors/request | 4 |
+| L1TEX global load sector hit rate | 0 |
+| L2 read sectors | 37,523,435 |
+| L2 read lookup hit sectors | 853 |
+| L2 read lookup miss sectors | 37,492,095 |
+
+HBM total byte traffic = 1,188.07 MB. Using the 342.37-us duration from a different NCU profiling report gives ~3.47 TB/s, an approximate cross-report estimate rather than same-pass HBM BW. 4 sectors/request corresponds to 128 bytes across a coalesced full FP32 warp. L2 read sectors (~1200.75 MB) exceed global-load traffic (800 MB); investigate source and operation types, including write-related read operations; exact cause not yet established. Write count is ~12 MB below logical writes; do not ascribe cause without more evidence. The provided L2 read hit/miss aliases do not sum exactly to all read sectors, so do not interpret them as a complete partition.
