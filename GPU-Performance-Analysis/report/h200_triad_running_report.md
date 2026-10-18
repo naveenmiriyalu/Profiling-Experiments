@@ -107,3 +107,15 @@ HBM total byte traffic = 1,188.07 MB. Using the 342.37-us duration from a differ
 | L2 write lookup misses | 105 | 0.00336 |
 
 Delta all-read minus TEX-source-read = 12,523,435 sectors = 400.74992 MB; delta all-write minus TEX-source-write = 6,236,664 sectors = 199.573248 MB. These are not established as physical extra DRAM reads/writes; investigate exact source units/operation qualifiers. Read hits+misses differ from all read operations, while write hits exceed all write-operation sectors, so do not calculate a naive partitioned hit rate from these aliases.
+
+## NCU scheduler + warp-state metrics (user-supplied)
+
+- One or more eligible: 24.69%; no eligible: 75.31%.
+- Issued warp per scheduler: 0.25 per cycle (approximately one issue per 4.1 cycles).
+- Average active warps per scheduler: 11.66 / max 16; eligible warps: 0.37.
+- Warp cycles per issued/executed instruction: 47.25.
+- Average active threads per warp: 32; avg not predicated off: 30.86.
+- Long-scoreboard stall contribution 40.8 cycles/issued instruction (~86.4%).
+- PC sampling metric smsp__pcsamp_sample_count was absent; source-correlated PC sampling not available in supplied report.
+
+Interpretation: approx 72.9% average active-warp occupancy by 11.66/16, not the previously computed theoretical 100% ceiling. Low scheduler eligibility is consistent with memory-dependent waits. 40.8 cycles is normalized warp-stall contribution, *not measured per-load DRAM latency*. Nsight's 75.31% estimated local speedup is not a realized end-to-end speedup. Meanwhile measured throughput is high (~3.44 TB/s useful unprofiled; ~72.15% normalized DRAM SOL), so do not conclude merely from scoreboard percentages that low latency-hiding is the only limiting factor. Next compare MLP benchmarks and memory throughput/stall metrics.
