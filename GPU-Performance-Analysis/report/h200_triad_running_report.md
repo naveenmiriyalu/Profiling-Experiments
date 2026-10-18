@@ -92,3 +92,18 @@ At 342.37 us and 1.2 GB algorithmic bytes, useful bandwidth would be approximate
 | L2 read lookup miss sectors | 37,492,095 |
 
 HBM total byte traffic = 1,188.07 MB. Using the 342.37-us duration from a different NCU profiling report gives ~3.47 TB/s, an approximate cross-report estimate rather than same-pass HBM BW. 4 sectors/request corresponds to 128 bytes across a coalesced full FP32 warp. L2 read sectors (~1200.75 MB) exceed global-load traffic (800 MB); investigate source and operation types, including write-related read operations; exact cause not yet established. Write count is ~12 MB below logical writes; do not ascribe cause without more evidence. The provided L2 read hit/miss aliases do not sum exactly to all read sectors, so do not interpret them as a complete partition.
+
+## Further L2 counters (user-supplied)
+
+| Counter | Sectors | Decimal MB (32 B/sector) |
+|---|---:|---:|
+| L2 all read op | 37,523,435 | 1200.74992 |
+| L2 all write op | 18,736,664 | 599.573248 |
+| L2 TEX-source read op | 25,000,000 | 800 |
+| L2 TEX-source write op | 12,500,000 | 400 |
+| L2 read lookup hits | 853 | 0.027296 |
+| L2 read lookup misses | 37,492,095 | 1199.74704 |
+| L2 write lookup hits | 18,737,669 | 599.605408 |
+| L2 write lookup misses | 105 | 0.00336 |
+
+Delta all-read minus TEX-source-read = 12,523,435 sectors = 400.74992 MB; delta all-write minus TEX-source-write = 6,236,664 sectors = 199.573248 MB. These are not established as physical extra DRAM reads/writes; investigate exact source units/operation qualifiers. Read hits+misses differ from all read operations, while write hits exceed all write-operation sectors, so do not calculate a naive partitioned hit rate from these aliases.
